@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module>
+    <id>skamasle-ols</id>
+    <name>Skamasle OLS Connector</name>
+    <description>Alpha developer release. Connects Plesk domains to OpenLiteSpeed and isolated LSPHP routing.</description>
+    <category>webserver</category>
+    <category>performance</category>
+    <version>0.1.0</version>
+    <release>1</release>
+    <vendor>Skamasle</vendor>
+    <plesk_min_version>18.0.0</plesk_min_version>
+</module>

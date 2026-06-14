@@ -1,0 +1,755 @@
+<?php
+$escape = static function ($value) {
+    return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+};
+
+$statusClass = static function ($type) {
+    return array(
+        'success' => 'skamasle-ols-alert--success',
+        'warning' => 'skamasle-ols-alert--warning',
+        'error' => 'skamasle-ols-alert--error',
+        'info' => 'skamasle-ols-alert--info',
+    )[$type] ?? 'skamasle-ols-alert--info';
+};
+
+$pillClass = static function ($isActive) {
+    return $isActive ? 'skamasle-ols-pill--ok' : 'skamasle-ols-pill--muted';
+};
+
+$controlStatus = isset($this->controlStatus) && is_array($this->controlStatus)
+    ? $this->controlStatus
+    : array();
+$engine = isset($controlStatus['engine']) && is_array($controlStatus['engine'])
+    ? $controlStatus['engine']
+    : array();
+$listener = isset($controlStatus['listener']) && is_array($controlStatus['listener'])
+    ? $controlStatus['listener']
+    : array('bindAddress' => '127.0.0.1', 'port' => 'unknown', 'protocol' => 'http');
+$nginxService = isset($controlStatus['nginxService']) && is_array($controlStatus['nginxService'])
+    ? $controlStatus['nginxService']
+    : array();
+$templateStatus = isset($controlStatus['templateStatus']) && is_array($controlStatus['templateStatus'])
+    ? $controlStatus['templateStatus']
+    : array();
+$enterpriseStatus = isset($controlStatus['enterpriseStatus']) && is_array($controlStatus['enterpriseStatus'])
+    ? $controlStatus['enterpriseStatus']
+    : array();
+$engineInstalled = !empty($engine['installed']);
+$templateInstalled = !empty($templateStatus['installed']);
+$templateExists = !empty($templateStatus['customTemplateExists']);
+$templateBackupRequired = !empty($templateStatus['backupRequired']);
+$templateRefreshRequired = !empty($templateStatus['refreshRequired']);
+$templateSourceHash = isset($templateStatus['sourceHash']) ? (string) $templateStatus['sourceHash'] : '';
+$templateTargetHash = isset($templateStatus['targetHash']) ? (string) $templateStatus['targetHash'] : '';
+$templateHashesMatch = '' !== $templateSourceHash
+    && $templateSourceHash === $templateTargetHash;
+$enterpriseInstalled = !empty($enterpriseStatus['installed']);
+$nginxActive = !empty($nginxService['active']);
+$moduleVersion = isset($this->moduleVersion) ? (string) $this->moduleVersion : 'unknown';
+$projectUrl = isset($this->projectUrl) ? (string) $this->projectUrl : '#';
+$gitUrl = isset($this->gitUrl) ? (string) $this->gitUrl : '#';
+$domainSearch = isset($this->domainSearch) ? (string) $this->domainSearch : '';
+$domainPage = isset($this->domainPage) ? max(1, (int) $this->domainPage) : 1;
+$domainPageSize = isset($this->domainPageSize) ? max(1, (int) $this->domainPageSize) : 25;
+$installModeDefault = isset($this->installModeDefault) ? (string) $this->installModeDefault : 'recommended-bootstrap';
+$installModeOptions = isset($this->installModeOptions) && is_array($this->installModeOptions)
+    ? $this->installModeOptions
+    : array();
+$customRepoUrlDefault = isset($this->customRepoUrlDefault)
+    ? (string) $this->customRepoUrlDefault
+    : '';
+$indexUrl = pm_Context::getBaseUrl() . 'index.php/index/index';
+$buildDomainUrl = static function (array $params) use ($indexUrl) {
+    $filtered = array();
+    foreach ($params as $key => $value) {
+        if (null === $value || '' === (string) $value) {
+            continue;
+        }
+        $filtered[] = rawurlencode((string) $key) . '=' . rawurlencode((string) $value);
+    }
+    return $indexUrl . (empty($filtered) ? '' : ('?' . implode('&', $filtered)));
+};
+?>
+
+<link rel="stylesheet" href="<?php echo $escape($this->stylesheetUrl); ?>">
+
+<div class="skamasle-ols-page">
+    <div class="skamasle-ols-hero">
+        <div>
+            <p class="skamasle-ols-kicker">Skamasle OLS Connector</p>
+            <h1 class="skamasle-ols-title">OpenLiteSpeed control center</h1>
+            <p class="skamasle-ols-meta">
+                Alpha developer release · Version <?php echo $escape($moduleVersion); ?> ·
+                <a href="<?php echo $escape($projectUrl); ?>" target="_blank" rel="noopener noreferrer">
+                    skamasle.com
+                </a> ·
+                <a href="<?php echo $escape($gitUrl); ?>" target="_blank" rel="noopener noreferrer">
+                    GitHub
+                </a>
+            </p>
+            <p class="skamasle-ols-lead">
+                Install or remove OpenLiteSpeed, keep nginx under Plesk control,
+                and switch domains between native routing and OLS with a clearer
+                activation flow.
+            </p>
+        </div>
+        <div class="skamasle-ols-hero-actions">
+            <div class="skamasle-ols-action-strip">
+                <a class="btn skamasle-ols-btn-primary" href="<?php echo $escape($this->diagnosticsUrl); ?>">
+                    Download diagnostics
+                </a>
+            </div>
+            <?php if ($engineInstalled): ?>
+                <form method="post" action="<?php echo $escape($this->uninstallEngineUrl); ?>">
+                    <button type="submit" class="btn skamasle-ols-btn-danger">
+                        Uninstall OLS
+                    </button>
+                </form>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <?php if (!empty($this->engineMessage)): ?>
+        <div class="skamasle-ols-alert <?php echo $statusClass($this->engineMessageType ?: 'info'); ?>">
+            <?php echo $escape($this->engineMessage); ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if (!$nginxActive): ?>
+        <div class="skamasle-ols-alert skamasle-ols-alert--warning">
+            nginx is not active or could not be verified. OLS activation remains
+            unavailable until nginx is running.
+        </div>
+    <?php endif; ?>
+
+    <?php if ($enterpriseInstalled): ?>
+        <div class="skamasle-ols-alert skamasle-ols-alert--error">
+            LiteSpeed Enterprise appears to be installed on this server. This
+            module is intentionally blocked in that case and should not be used
+            on top of an existing Enterprise deployment.
+            <?php if (!empty($enterpriseStatus['evidence'])): ?>
+                Evidence: <?php echo $escape(implode(', ', $enterpriseStatus['evidence'])); ?>.
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($templateRefreshRequired): ?>
+        <div class="skamasle-ols-alert skamasle-ols-alert--warning">
+            Template mismatch detected. Refresh required before OLS activation.
+            The installed nginx custom template differs from the bundled
+            version, and the existing copy will be backed up before replacement.
+        </div>
+    <?php elseif ($templateInstalled): ?>
+        <div class="skamasle-ols-alert skamasle-ols-alert--success">
+            The bundled custom nginx template is installed.
+        </div>
+    <?php endif; ?>
+
+    <div class="skamasle-ols-card">
+        <div class="skamasle-ols-summary">
+            <div class="skamasle-ols-summary-card">
+                <p class="skamasle-ols-summary-label">Engine</p>
+                <p class="skamasle-ols-summary-value">
+                    <?php echo $escape($engineInstalled ? 'Installed' : 'Not installed'); ?>
+                </p>
+                <p class="skamasle-ols-summary-note">
+                    <?php echo $escape(isset($engine['status']) ? $engine['status'] : 'unknown'); ?>
+                </p>
+            </div>
+            <div class="skamasle-ols-summary-card">
+                <p class="skamasle-ols-summary-label">Listener</p>
+                <p class="skamasle-ols-summary-value">
+                    <?php echo $escape($listener['bindAddress'] . ':' . $listener['port']); ?>
+                </p>
+                <p class="skamasle-ols-summary-note">
+                    <?php echo $escape(isset($listener['protocol']) ? $listener['protocol'] : 'http'); ?>
+                </p>
+            </div>
+            <div class="skamasle-ols-summary-card">
+                <p class="skamasle-ols-summary-label">nginx</p>
+                <p class="skamasle-ols-summary-value">
+                    <?php echo $escape($nginxActive ? 'Active' : 'Down'); ?>
+                </p>
+                <p class="skamasle-ols-summary-note">
+                    <?php echo $escape(isset($nginxService['state']) ? ucfirst($nginxService['state']) : 'Unknown'); ?>
+                </p>
+            </div>
+            <div class="skamasle-ols-summary-card">
+                <p class="skamasle-ols-summary-label">Template</p>
+                <p class="skamasle-ols-summary-value">
+                    <?php echo $escape($templateInstalled ? 'Managed' : 'Missing'); ?>
+                </p>
+                <p class="skamasle-ols-summary-note">
+                    <?php echo $escape(
+                        $templateRefreshRequired
+                            ? 'Refresh required'
+                            : ($templateInstalled ? 'Ready for activation' : 'Not installed')
+                    ); ?>
+                </p>
+            </div>
+            <div class="skamasle-ols-summary-card">
+                <p class="skamasle-ols-summary-label">Domains</p>
+                <p class="skamasle-ols-summary-value">
+                    <?php echo $escape(isset($controlStatus['domainCount']) ? $controlStatus['domainCount'] : 0); ?>
+                </p>
+                <p class="skamasle-ols-summary-note">
+                    <?php echo $escape(isset($controlStatus['generation']) ? ('Generation ' . $controlStatus['generation']) : 'Unknown'); ?>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="skamasle-ols-card">
+        <div class="skamasle-ols-actions-grid">
+            <div class="skamasle-ols-stack">
+                <h2>Primary actions</h2>
+                <div class="skamasle-ols-helper">
+                    Use these controls for the engine lifecycle and listener tuning.
+                    Stage the OLS vhost first, then enable or disable OLS routing from the domain table.
+                </div>
+
+                <div class="skamasle-ols-field">
+                    <span class="skamasle-ols-label">OpenLiteSpeed provisioning</span>
+                    <form method="post" action="<?php echo $escape($this->installEngineUrl); ?>" class="skamasle-ols-field">
+                        <select class="skamasle-ols-input" name="install_mode">
+                            <?php foreach ($installModeOptions as $modeValue => $modeLabel): ?>
+                                <option value="<?php echo $escape($modeValue); ?>" <?php echo $modeValue === $installModeDefault ? 'selected="selected"' : ''; ?>>
+                                    <?php echo $escape($modeLabel); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <input
+                            class="skamasle-ols-input"
+                            type="url"
+                            name="custom_repo_url"
+                            value="<?php echo $escape($customRepoUrlDefault); ?>"
+                            placeholder="https://repo.example.test/openlitespeed/\$basearch"
+                        >
+                        <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo $enterpriseInstalled ? 'disabled="disabled"' : ''; ?>>
+                            <?php echo $engineInstalled ? 'Reinstall OLS' : 'Install OLS'; ?>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="skamasle-ols-helper">
+                    <code>Recommended bootstrap</code> follows the vendor bootstrap path:
+                    <a href="https://docs.openlitespeed.org/installation/repo/" target="_blank" rel="noopener noreferrer">
+                        OpenLiteSpeed repository bootstrap
+                    </a>.
+                    For the full install flow, see
+                    <a href="https://docs.openlitespeed.org/installation/" target="_blank" rel="noopener noreferrer">
+                        the OpenLiteSpeed installation guide
+                    </a>.
+                    <code>Custom repository URL</code> writes a repo file from the URL you provide.
+                    <code>Repository already configured</code> skips repo setup and only installs the package.
+                    <code>OpenLiteSpeed already installed</code> skips package installation and only applies module integration.
+                </div>
+
+                <div class="skamasle-ols-field">
+                    <span class="skamasle-ols-label">Listener port</span>
+                    <form method="post" action="<?php echo $escape($this->setListenerPortUrl); ?>" class="skamasle-ols-field">
+                        <input
+                            class="skamasle-ols-input"
+                            type="number"
+                            name="listener_port"
+                            min="1024"
+                            max="65535"
+                            value="<?php echo $escape($listener['port']); ?>"
+                            required="required"
+                        >
+                        <button type="submit" class="btn skamasle-ols-btn-primary">
+                            Update listener
+                        </button>
+                    </form>
+                </div>
+
+                <div class="skamasle-ols-helper">
+                    Choose a free private port if the default one is already in use.
+                </div>
+            </div>
+
+            <div class="skamasle-ols-stack">
+                <h3>System state</h3>
+                <div class="skamasle-ols-field">
+                    <span class="skamasle-ols-pill <?php echo $pillClass($engineInstalled); ?>">
+                        <?php echo $engineInstalled ? 'OLS installed' : 'OLS not installed'; ?>
+                    </span>
+                    <span class="skamasle-ols-pill <?php echo $pillClass($nginxActive); ?>">
+                        <?php echo $nginxActive ? 'nginx active' : 'nginx inactive'; ?>
+                    </span>
+                    <span class="skamasle-ols-pill <?php echo $pillClass($templateInstalled); ?>">
+                        <?php echo $templateInstalled ? 'template ready' : 'template missing'; ?>
+                    </span>
+                    <span class="skamasle-ols-pill <?php echo $pillClass(!$templateRefreshRequired); ?>">
+                        <?php echo $templateRefreshRequired ? 'refresh required' : 'in sync'; ?>
+                    </span>
+                </div>
+                <?php if ('' !== $templateSourceHash): ?>
+                    <div class="skamasle-ols-helper skamasle-ols-template-hash">
+                        sha256 <?php echo $templateHashesMatch ? 'match' : 'mismatch'; ?>:
+                        <span>bundled <?php echo $escape(substr($templateSourceHash, 0, 12)); ?>…</span>
+                        <span>installed <?php echo $escape('' !== $templateTargetHash ? substr($templateTargetHash, 0, 12) : 'missing'); ?>…</span>
+                    </div>
+                <?php endif; ?>
+                <div class="skamasle-ols-field">
+                    <span class="skamasle-ols-label">nginx custom template</span>
+                    <form method="post" action="<?php echo $escape($this->installTemplateUrl); ?>">
+                        <?php if ($templateExists && $templateRefreshRequired): ?>
+                            <label class="skamasle-ols-helper" style="display:block; margin-bottom:8px;">
+                                <input type="checkbox" name="overwrite_existing" value="1" required="required">
+                                I understand the existing custom template will be backed up and replaced.
+                            </label>
+                        <?php endif; ?>
+                        <button type="submit" class="btn skamasle-ols-btn-primary">
+                            <?php echo $templateInstalled
+                                ? 'Refresh nginx template'
+                                : ($templateRefreshRequired ? 'Refresh nginx template' : 'Install nginx template'); ?>
+                        </button>
+                    </form>
+                </div>
+                <div class="skamasle-ols-helper">
+                    The nginx custom template is required before OLS routing can be
+                    enabled. If the installed template differs from the bundled
+                    version, refresh is required before activation and the
+                    current copy will be backed up first.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="skamasle-ols-card">
+        <h2>LSCache</h2>
+        <div class="skamasle-ols-helper">
+            The server-level cache module is registered automatically.
+            Prepared OLS vhosts get a <code>module cache</code> block that
+            points to <code>$VH_ROOT/lscache</code>, and the domain toggle
+            below flips <code>enableCache</code> for that vhost.
+        </div>
+    </div>
+
+    <div class="skamasle-ols-card">
+        <h2>Capability snapshot</h2>
+        <div class="skamasle-ols-table-wrap">
+            <table class="skamasle-ols-table">
+                <thead>
+                    <tr>
+                        <th>Capability</th>
+                        <th>Observed value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($this->capabilities as $label => $value): ?>
+                        <tr>
+                            <td><?php echo $escape($label); ?></td>
+                            <td><?php echo $escape($value); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="skamasle-ols-card">
+        <h2>Desired state</h2>
+
+        <?php if (empty($this->controlStatus['available'])): ?>
+            <div class="skamasle-ols-alert skamasle-ols-alert--warning">
+                State validation is unavailable:
+                <?php echo $escape(isset($controlStatus['error']) ? $controlStatus['error'] : 'Unknown error'); ?>
+            </div>
+        <?php else: ?>
+            <div class="skamasle-ols-table-wrap">
+                <table class="skamasle-ols-table">
+                    <tbody>
+                        <tr>
+                            <th>Schema version</th>
+                            <td><?php echo $escape($this->controlStatus['schemaVersion']); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Generation</th>
+                            <td><?php echo $escape(isset($controlStatus['generation']) ? $controlStatus['generation'] : 0); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Default routing</th>
+                            <td><?php echo $escape($this->controlStatus['defaultRouting']); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Managed domains</th>
+                            <td><?php echo $escape(isset($controlStatus['domainCount']) ? $controlStatus['domainCount'] : 0); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Nginx service</th>
+                            <td>
+                                <?php
+                                if (isset($nginxService['state'])) {
+                                    echo $escape(ucfirst($nginxService['state']));
+                                } else {
+                                    echo 'Unknown';
+                                }
+                                ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Custom nginx template</th>
+                            <td>
+                                <?php
+                                if ($templateRefreshRequired) {
+                                    echo 'Refresh required';
+                                } elseif ($templateInstalled) {
+                                    echo 'Installed';
+                                } else {
+                                    echo 'Not installed';
+                                }
+                                ?>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <?php if (!empty($controlStatus['available'])): ?>
+        <div class="skamasle-ols-card">
+            <h2>OpenLiteSpeed installation</h2>
+            <div class="skamasle-ols-table-wrap">
+                <table class="skamasle-ols-table">
+                    <tbody>
+                        <tr>
+                            <th>Status</th>
+                            <td><?php echo $escape(isset($engine['status']) ? $engine['status'] : 'unknown'); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Installed</th>
+                            <td><?php echo $escape($engineInstalled ? 'Yes' : 'No'); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Listener</th>
+                            <td>
+                                <?php
+                                echo $escape(
+                                    $engine['listener']['bindAddress']
+                                    . ':'
+                                    . $engine['listener']['port']
+                                    . ' ('
+                                    . $engine['listener']['protocol']
+                                    . ')'
+                                );
+                                ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Repository</th>
+                            <td><?php echo $escape(isset($engine['repository']['name']) ? $engine['repository']['name'] : ''); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Repository configured</th>
+                            <td><?php echo $escape(!empty($engine['repository']['configured']) ? 'Yes' : 'No'); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Provisioning mode</th>
+                            <td><?php echo $escape(isset($engine['provisioning']['mode']) ? $engine['provisioning']['mode'] : 'recommended-bootstrap'); ?></td>
+                        </tr>
+                        <?php if (!empty($engine['provisioning']['customRepoUrl'])): ?>
+                            <tr>
+                                <th>Custom repository URL</th>
+                                <td><?php echo $escape($engine['provisioning']['customRepoUrl']); ?></td>
+                            </tr>
+                        <?php endif; ?>
+                        <tr>
+                            <th>Packages</th>
+                            <td><?php echo $escape(implode(', ', isset($engine['packages']) ? $engine['packages'] : array())); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Services</th>
+                            <td><?php echo $escape(implode(', ', isset($engine['services']) ? $engine['services'] : array())); ?></td>
+                        </tr>
+                        <tr>
+                            <th>Install receipt</th>
+                            <td><?php echo $escape(isset($controlStatus['planFile']) ? $controlStatus['planFile'] : ''); ?></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <p class="skamasle-ols-helper">
+                <?php if ($engineInstalled): ?>
+                    OpenLiteSpeed is recorded as installed by
+                    <code>install-engine</code>.
+                <?php elseif (!empty($engine['packageResult']['message'])): ?>
+                    <?php echo $escape($engine['packageResult']['message']); ?>
+                <?php else: ?>
+                    OpenLiteSpeed is not installed yet. Choose a provisioning mode and run
+                    <code>install-engine</code>.
+                <?php endif; ?>
+            </p>
+        </div>
+    <?php endif; ?>
+
+    <div class="skamasle-ols-card">
+        <h2>Domain readiness</h2>
+
+        <?php if ($this->domainError): ?>
+            <div class="skamasle-ols-alert skamasle-ols-alert--error">
+                <?php echo $escape($this->domainError); ?>
+            </div>
+        <?php elseif (!$this->domains): ?>
+            <div class="skamasle-ols-helper">No domains were returned by Plesk.</div>
+        <?php else: ?>
+            <form method="get" action="<?php echo $escape($indexUrl); ?>" class="skamasle-ols-field" style="margin-bottom: 14px;">
+                <input type="hidden" name="domain_page_size" value="<?php echo $escape($domainPageSize); ?>">
+                <input
+                    class="skamasle-ols-input"
+                    type="search"
+                    name="domain_search"
+                    value="<?php echo $escape($domainSearch); ?>"
+                    placeholder="Search domain, system user or path"
+                >
+                <button type="submit" class="btn skamasle-ols-btn-primary">Search</button>
+                <?php if ('' !== $domainSearch): ?>
+                    <a class="btn" href="<?php echo $escape($buildDomainUrl(array('domain_page_size' => $domainPageSize))); ?>">Clear</a>
+                <?php endif; ?>
+            </form>
+
+            <div class="skamasle-ols-helper">
+                Showing <?php echo $escape($this->domains['displayed']); ?> of
+                <?php echo $escape($this->domains['filtered']); ?> filtered domains
+                (<?php echo $escape($this->domains['total']); ?> total).
+            </div>
+
+            <?php if (empty($this->domains['filtered'])): ?>
+                <div class="skamasle-ols-helper" style="margin-top: 14px;">
+                    No domains match the current search.
+                </div>
+            <?php else: ?>
+                <div class="skamasle-ols-table-wrap" style="margin-top: 14px;">
+                    <table class="skamasle-ols-table">
+                        <thead>
+                            <tr>
+                                <th>Domain</th>
+                                <th>Status</th>
+                                <th>.htaccess</th>
+                                <th>Readiness</th>
+                                <th>LSCache</th>
+                                <th>Routing</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($this->domains['items'] as $domain): ?>
+                            <?php
+                            $statusLabel = $domain['suspended']
+                                ? 'Suspended'
+                                : ($domain['active'] ? 'Active' : 'Inactive');
+                            $routingLabel = 'ols' === $domain['requestedRouting'] ? 'OLS' : 'Native';
+                            $cacheEnabled = !empty($domain['cacheEnabled']);
+                            $cacheButtonLabel = $cacheEnabled
+                                ? 'Disable LSCache'
+                                : 'Enable LSCache';
+                            ?>
+                            <tr>
+                                <td class="skamasle-ols-domain">
+                                    <span class="skamasle-ols-domain-name">
+                                        <?php echo $escape($domain['name']); ?>
+                                    </span>
+                                    <span class="skamasle-ols-domain-meta">
+                                        <?php echo $escape($domain['systemUser']); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="skamasle-ols-pill <?php echo $pillClass('Active' === $statusLabel); ?>">
+                                        <?php echo $escape($statusLabel); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <strong>
+                                        <?php if ('compatible' === $domain['htaccess']['status']): ?>
+                                            Compatible
+                                        <?php elseif ('not-scanned' === $domain['htaccess']['status']): ?>
+                                            Not scanned
+                                        <?php elseif ('review' === $domain['htaccess']['status']): ?>
+                                            Review required
+                                        <?php else: ?>
+                                            Blocked
+                                        <?php endif; ?>
+                                    </strong>
+                                    <span class="skamasle-ols-domain-meta">
+                                        <?php if ('not-scanned' === $domain['htaccess']['status']): ?>
+                                            Run a manual scan to inspect `.htaccess` compatibility.
+                                        <?php else: ?>
+                                            <?php
+                                            echo $escape(
+                                                $domain['htaccess']['filesScanned'] . ' files, '
+                                                . $domain['htaccess']['findingCount'] . ' findings'
+                                            );
+                                            if (!empty($domain['htaccess']['scannedAt'])) {
+                                                echo ' - scanned at ' . $escape($domain['htaccess']['scannedAt']);
+                                            }
+                                            if (!empty($domain['htaccess']['scanDepth'])) {
+                                                echo ' - depth ' . $escape($domain['htaccess']['scanDepth']);
+                                            }
+                                            ?>
+                                        <?php endif; ?>
+                                    </span>
+                                    <?php if (!empty($domain['hosting'])): ?>
+                                        <form method="post" action="<?php echo $escape($this->scanDomainHtaccessUrl); ?>" class="skamasle-ols-field" style="margin-top: 10px;">
+                                            <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                            <select class="skamasle-ols-input" name="scan_depth">
+                                                <option value="0">Only root</option>
+                                                <option value="1">1 level</option>
+                                                <option value="2" selected="selected">2 levels</option>
+                                                <option value="4">4 levels</option>
+                                                <option value="8">8 levels</option>
+                                                <option value="all">All levels</option>
+                                            </select>
+                                            <button type="submit" class="btn">Scan .htaccess</button>
+                                        </form>
+                                        <span class="skamasle-ols-inline-note">
+                                            Selecting `all` may take significantly longer on large vhosts.
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if (!empty($domain['htaccess']['summary'])): ?>
+                                        <details class="skamasle-ols-details">
+                                            <summary>Show findings</summary>
+                                            <ul>
+                                                <?php
+                                                foreach (
+                                                    array_slice($domain['htaccess']['summary'], 0, 10)
+                                                    as $finding
+                                                ):
+                                                ?>
+                                                    <li>
+                                                        <?php
+                                                        echo $escape($finding['directive']);
+                                                        echo ' x' . $escape($finding['count']);
+                                                        echo ' (' . $escape($finding['classification']) . ')';
+                                                        echo ' - example: ';
+                                                        echo $escape($finding['exampleFile']);
+                                                        if ($finding['exampleLine'] > 0) {
+                                                            echo ':' . $escape($finding['exampleLine']);
+                                                        }
+                                                        ?>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </details>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <strong><?php echo $escape($domain['readiness']['label']); ?></strong>
+                                    <span class="skamasle-ols-domain-meta">
+                                        <?php echo $escape(implode(' ', $domain['readiness']['reasons'])); ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="skamasle-ols-domain-actions">
+                                        <span class="skamasle-ols-pill <?php echo $pillClass($cacheEnabled); ?>">
+                                            <?php echo $escape($cacheEnabled ? 'Enabled' : 'Disabled'); ?>
+                                        </span>
+                                        <?php if (!empty($domain['prepared'])): ?>
+                                            <form method="post" action="<?php echo $escape($this->setDomainCacheUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
+                                                <input type="hidden" name="cache_enabled" value="<?php echo $escape($cacheEnabled ? '0' : '1'); ?>">
+                                                <button type="submit" class="btn <?php echo $cacheEnabled ? '' : 'skamasle-ols-btn-primary'; ?>">
+                                                    <?php echo $escape($cacheButtonLabel); ?>
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <span class="skamasle-ols-inline-note">
+                                                Stage the OLS vhost first.
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="skamasle-ols-domain-actions">
+                                        <span class="skamasle-ols-pill <?php echo $pillClass('ols' === $domain['requestedRouting']); ?>">
+                                            <?php echo $escape($routingLabel); ?>
+                                        </span>
+                                        <?php if (empty($domain['prepared'])): ?>
+                                            <form method="post" action="<?php echo $escape($this->prepareDomainVhostUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                    Stage OLS vhost
+                                                </button>
+                                            </form>
+                                            <form method="post" action="<?php echo $escape($this->stageAndEnableDomainVhostUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                    Stage and enable OLS
+                                                </button>
+                                            </form>
+                                        <?php else: ?>
+                                            <form method="post" action="<?php echo $escape($this->prepareDomainVhostUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                    Rebuild OLS vhost
+                                                </button>
+                                            </form>
+                                            <form method="post" action="<?php echo $escape($this->resetDomainVhostUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <button type="submit" class="btn skamasle-ols-btn-danger">
+                                                    Reset OLS vhost
+                                                </button>
+                                            </form>
+                                            <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <input type="hidden" name="routing" value="<?php echo $escape('ols' === $domain['requestedRouting'] ? 'native' : 'ols'); ?>">
+                                                <button type="submit" class="btn <?php echo 'ols' === $domain['requestedRouting'] ? '' : 'skamasle-ols-btn-primary'; ?>">
+                                                    <?php echo $escape('ols' === $domain['requestedRouting'] ? 'Disable OLS' : 'Enable OLS'); ?>
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                        <span class="skamasle-ols-inline-note">
+                                            <?php
+                                            if ($domain['readiness']['acknowledgementRequired']) {
+                                                echo 'Future activation will require acknowledging compatibility warnings.';
+                                            } else {
+                                                echo 'Vhost staging is available when OLS is installed.';
+                                            }
+                                            ?>
+                                        </span>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <?php if (!empty($this->domains['pages']) && $this->domains['pages'] > 1): ?>
+                    <div class="skamasle-ols-helper" style="margin-top: 14px;">
+                        Page <?php echo $escape($this->domains['page']); ?> of <?php echo $escape($this->domains['pages']); ?>
+                    </div>
+                    <div class="skamasle-ols-action-strip" style="margin-top: 10px; flex-wrap: wrap;">
+                        <?php if ($this->domains['page'] > 1): ?>
+                            <a class="btn" href="<?php echo $escape($buildDomainUrl(array(
+                                'domain_search' => $domainSearch,
+                                'domain_page_size' => $domainPageSize,
+                                'domain_page' => 1,
+                            ))); ?>">First</a>
+                            <a class="btn" href="<?php echo $escape($buildDomainUrl(array(
+                                'domain_search' => $domainSearch,
+                                'domain_page_size' => $domainPageSize,
+                                'domain_page' => $this->domains['page'] - 1,
+                            ))); ?>">Previous</a>
+                        <?php endif; ?>
+
+                        <?php if ($this->domains['page'] < $this->domains['pages']): ?>
+                            <a class="btn" href="<?php echo $escape($buildDomainUrl(array(
+                                'domain_search' => $domainSearch,
+                                'domain_page_size' => $domainPageSize,
+                                'domain_page' => $this->domains['page'] + 1,
+                            ))); ?>">Next</a>
+                            <a class="btn" href="<?php echo $escape($buildDomainUrl(array(
+                                'domain_search' => $domainSearch,
+                                'domain_page_size' => $domainPageSize,
+                                'domain_page' => $this->domains['pages'],
+                            ))); ?>">Last</a>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        <?php endif; ?>
+    </div>
+</div>

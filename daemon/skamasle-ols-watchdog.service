@@ -1,0 +1,27 @@
+[Unit]
+Description=Skamasle OLS .htaccess Watchdog Prototype
+After=network.target lsws.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/skamasle-ols-watchdog
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5s
+
+# Run as root so it can watch all vhost directories
+User=root
+Group=root
+
+# Resource limits (target: < 15MB RAM)
+MemoryLimit=20M
+LimitNOFILE=65535
+
+# Logging to syslog (daemon facility)
+StandardOutput=null
+StandardError=journal
+SyslogIdentifier=skamasle-ols-watchdog
+
+[Install]
+WantedBy=multi-user.target

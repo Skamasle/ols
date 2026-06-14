@@ -1,0 +1,84 @@
+#!/usr/local/psa/admin/bin/php
+<?php
+
+$libraryCandidates = array(
+    dirname(__DIR__) . '/plib/library',
+    '/usr/local/psa/admin/plib/modules/skamasle-ols/library',
+);
+$libraryLoaded = false;
+foreach ($libraryCandidates as $libraryDirectory) {
+    $validatorFile = $libraryDirectory . '/DesiredStateValidator.php';
+    $stateStoreFile = $libraryDirectory . '/StateStore.php';
+    $commandFile = $libraryDirectory . '/ControlCommand.php';
+    if (is_file($validatorFile)
+        && is_file($stateStoreFile)
+        && is_file($commandFile)
+    ) {
+        require_once $validatorFile;
+        require_once $stateStoreFile;
+        require_once $commandFile;
+        $libraryLoaded = true;
+        break;
+    }
+}
+if (!$libraryLoaded) {
+    fwrite(STDERR, '{"ok":false,"error":"Validator library is unavailable."}' . PHP_EOL);
+    exit(70);
+}
+
+const SKAMASLE_OLS_STATE_FILE =
+    '/usr/local/psa/var/modules/skamasle-ols/desired-state.json';
+
+function outputJson(array $value, $stream = STDOUT)
+{
+    fwrite(
+        $stream,
+        json_encode($value, JSON_UNESCAPED_SLASHES) . PHP_EOL
+    );
+}
+
+$arguments = $argv;
+array_shift($arguments);
+$validator = new Modules_SkamasleOls_DesiredStateValidator();
+$stateStore = new Modules_SkamasleOls_StateStore(
+    SKAMASLE_OLS_STATE_FILE,
+    $validator
+);
+$logPath = '/usr/local/psa/var/modules/skamasle-ols/logs/ols-debug.log';
+try {
+    $control = new Modules_SkamasleOls_ControlCommand($stateStore);
+    $result = $control->run($arguments);
+} catch (Throwable $exception) {
+    $event = array(
+        'ts' => gmdate('c'),
+        'event' => 'sbin.unhandled-exception',
+        'context' => array(
+            'command' => isset($arguments[0]) ? $arguments[0] : null,
+            'argumentCount' => count($arguments),
+            'exception' => get_class($exception),
+            'error' => $exception->getMessage(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'uid' => function_exists('posix_geteuid') ? posix_geteuid() : null,
+            'gid' => function_exists('posix_getegid') ? posix_getegid() : null,
+        ),
+    );
+    @file_put_contents(
+        $logPath,
+        json_encode($event, JSON_UNESCAPED_SLASHES) . PHP_EOL,
+        FILE_APPEND | LOCK_EX
+    );
+    $result = array(
+        'exitCode' => 70,
+        'stderr' => true,
+        'payload' => array(
+            'ok' => false,
+            'error' => $exception->getMessage(),
+            'exception' => get_class($exception),
+            'logPath' => $logPath,
+        ),
+    );
+}
+$stream = $result['stderr'] ? STDERR : STDOUT;
+outputJson($result['payload'], $stream);
+exit($result['exitCode']);

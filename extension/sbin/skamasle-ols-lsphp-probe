@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -u
+set -o pipefail
+
+sanitize()
+{
+    tr '\t\r\n' '   ' | sed 's/[[:space:]][[:space:]]*/ /g'
+}
+
+for php_root in /opt/plesk/php/[0-9]*.[0-9]*; do
+    [[ -d "${php_root}" ]] || continue
+
+    branch="${php_root##*/}"
+    [[ "${branch}" =~ ^[0-9]+\.[0-9]+$ ]] || continue
+
+    binary="${php_root}/bin/lsphp"
+    [[ -f "${binary}" && -x "${binary}" ]] || continue
+
+    version="$("${binary}" -v 2>&1 | head -n 1 | sanitize)"
+    info="$("${binary}" -i 2>&1 || true)"
+    sapi="$(printf '%s\n' "${info}" | awk -F' => ' '/^Server API =>/ {print $2; exit}' | sanitize)"
+    ini="$(printf '%s\n' "${info}" | awk -F' => ' '/^Loaded Configuration File =>/ {print $2; exit}' | sanitize)"
+    if [[ -z "${sapi}" ]] && [[ "${version}" =~ [Ll]ite[Ss]peed ]]; then
+        sapi="LiteSpeed"
+    fi
+    if [[ -z "${ini}" ]]; then
+        ini="(unavailable)"
+    fi
+    modules_hash="$("${binary}" -m 2>/dev/null | LC_ALL=C sort | sha256sum | awk '{print $1}')"
+
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+        "${branch}" \
+        "${sapi}" \
+        "${modules_hash}" \
+        "${version}" \
+        "${ini}"
+done

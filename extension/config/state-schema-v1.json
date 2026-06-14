@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:skamasle:ols:state:v1",
+  "title": "Skamasle OLS desired state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generation",
+    "server",
+    "domains"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultRouting",
+        "listener"
+      ],
+      "properties": {
+        "defaultRouting": {
+          "const": "native"
+        },
+        "listener": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "bindAddress",
+            "port",
+            "protocol"
+          ],
+          "properties": {
+            "bindAddress": {
+              "enum": [
+                "127.0.0.1",
+                "::1"
+              ]
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535
+            },
+            "protocol": {
+              "const": "http"
+            }
+          }
+        }
+      }
+    },
+    "domains": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/domain"
+      }
+    }
+  },
+  "$defs": {
+    "routing": {
+      "enum": [
+        "native",
+        "ols"
+      ]
+    },
+    "domainName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "guid",
+        "pleskId",
+        "name",
+        "aliases",
+        "documentRoot",
+        "systemUser",
+        "systemGroup",
+        "nativeProfile",
+        "php",
+        "requestedRouting",
+        "appliedRouting"
+      ],
+      "properties": {
+        "guid": {
+          "type": "string",
+          "pattern": "^(?:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[1-5][a-fA-F0-9]{3}-[89aAbB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}|\\{[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[1-5][a-fA-F0-9]{3}-[89aAbB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}\\})$"
+        },
+        "pleskId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "$ref": "#/$defs/domainName"
+        },
+        "aliases": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/domainName"
+          }
+        },
+        "documentRoot": {
+          "type": "string",
+          "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//).+$"
+        },
+        "vhostRoot": {
+          "type": "string",
+          "pattern": "^/(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//).+$"
+        },
+        "systemUser": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_.-]{0,63}$"
+        },
+        "systemGroup": {
+          "type": "string",
+          "pattern": "^[a-z_][a-z0-9_.-]{0,63}$"
+        },
+        "nativeProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "webMode",
+            "proxyMode",
+            "phpHandlerId"
+          ],
+          "properties": {
+            "webMode": {
+              "enum": [
+                "proxy",
+                "nginx-only"
+              ]
+            },
+            "proxyMode": {
+              "type": "boolean"
+            },
+            "phpHandlerId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            }
+          }
+        },
+        "php": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pleskHandlerId",
+            "version",
+            "lsphpBinary",
+            "socket"
+          ],
+          "properties": {
+            "pleskHandlerId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^\\d+\\.\\d+$"
+            },
+            "lsphpBinary": {
+              "type": "string"
+            },
+            "socket": {
+              "type": "string"
+            }
+          }
+        },
+        "requestedRouting": {
+          "$ref": "#/$defs/routing"
+        },
+        "appliedRouting": {
+          "$ref": "#/$defs/routing"
+        },
+        "cacheEnabled": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}
