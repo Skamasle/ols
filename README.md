@@ -94,13 +94,11 @@ Suggested images:
 
 Example layout:
 
-```markdown
 ![Extension dashboard](screenshot/dashboard.png)
 ![Domain inventory](screenshot/domain-readiness.png)
 ![Domain readiness](screenshot/domain-installed.png)
 ![LSCACHE](screenshot/lscache.png)
 
-```
 
 ## The Idea
 
