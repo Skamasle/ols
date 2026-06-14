@@ -112,7 +112,7 @@ nginx -> Plesk PHP-FPM
 This project preserves both and adds a third:
 
 ```text
-nginx -> OpenLiteSpeed -> LSPHP/LSAPI
+nginx -> OpenLiteSpeed -> LSPHP/LSAPI + LSCACHE
 ```
 
 Routing is selected per domain. A single server can simultaneously host:
