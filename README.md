@@ -83,6 +83,12 @@ the release number automatically. The resulting file follows this pattern:
 build/skamasle-ols-plesk-<version>-<release>.zip
 ```
 
+You can install the latest ZIP from `build/` with:
+
+```bash
+plesk bin extension -i "build/skamasle-ols-plesk-<version>-<release>.zip"
+```
+
 After building, validate the archive with:
 
 ```bash

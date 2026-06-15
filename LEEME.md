@@ -53,6 +53,12 @@ Desde la tabla de dominios de la extensión también se pueden ajustar por
 dominio las conexiones máximas LSAPI, procesos `PHP_LSAPI_CHILDREN`,
 instancias, backlog, timeouts, conexión persistente y buffer de respuesta.
 
+Los ZIP finales se publican en `build/` y se instalan con:
+
+```bash
+plesk bin extension -i "build/skamasle-ols-plesk-<version>-<release>.zip"
+```
+
 ## La idea
 
 Una instalación Plesk ya dispone de dos modalidades nativas:
