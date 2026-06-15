@@ -77,8 +77,11 @@ class TestOlsConfigManager extends Modules_SkamasleOls_OlsConfigManager
     public $logEntries = array();
     public $routingWrites = array();
     public $identitySyncs = array();
+    public $exampleIdentitySyncs = array();
     public $cacheModuleSyncs = array();
     public $vhostConfigWrites = array();
+    public $lsapiWrites = array();
+    public $clearCalls = array();
 
     public function __construct()
     {
@@ -142,6 +145,23 @@ class TestOlsConfigManager extends Modules_SkamasleOls_OlsConfigManager
         );
     }
 
+    public function syncExampleVhostIdentity($user = 'apache', $group = 'apache')
+    {
+        $this->exampleIdentitySyncs[] = array(
+            'user' => $user,
+            'group' => $group,
+        );
+
+        return array(
+            'available' => true,
+            'configured' => true,
+            'changed' => true,
+            'path' => '/usr/local/lsws/Example/html',
+            'user' => $user,
+            'group' => $group,
+        );
+    }
+
     public function syncListenerSslCertificate()
     {
         return array(
@@ -158,6 +178,15 @@ class TestOlsConfigManager extends Modules_SkamasleOls_OlsConfigManager
         array $listener,
         array $remainingDomains = array()
     ) {
+        $this->clearCalls[] = array(
+            'domain' => $domain['name'],
+            'remainingDomains' => array_map(
+                function ($item) {
+                    return $item['name'];
+                },
+                $remainingDomains
+            ),
+        );
         $this->logEntries[] = array(
             'event' => 'clear-domain-artifacts',
             'context' => array(
@@ -205,6 +234,9 @@ class TestOlsConfigManager extends Modules_SkamasleOls_OlsConfigManager
             'guid' => $domain['guid'],
             'cacheEnabled' => !empty($domain['cacheEnabled']),
         );
+        if (isset($domain['php']['lsapi'])) {
+            $this->lsapiWrites[] = $domain['php']['lsapi'];
+        }
 
         return array(
             'available' => true,
@@ -305,13 +337,32 @@ class TestOlsServiceManager extends Modules_SkamasleOls_OlsServiceManager
     }
 }
 
+class TestStateStore extends Modules_SkamasleOls_StateStore
+{
+    public $failNextWrite = false;
+
+    public function write(array $state, $expectedGeneration)
+    {
+        if ($this->failNextWrite) {
+            $this->failNextWrite = false;
+            throw new RuntimeException('Desired state generation conflict.');
+        }
+
+        return parent::write($state, $expectedGeneration);
+    }
+}
+
 class pm_Domain
 {
     public static $getAllCalls = 0;
+    public static $available = true;
 
     public static function getAllDomains()
     {
         self::$getAllCalls++;
+        if (!self::$available) {
+            return array();
+        }
         return array(
             new TestPleskDomain(),
         );
@@ -322,10 +373,11 @@ class TestPleskDomain extends pm_Domain
 {
     public static $settings = array();
     public static $phpHandlerId = 'plesk-php83-fpm';
+    public static $guid = '{123e4567-e89b-42d3-a456-426614174000}';
 
     public function getGuid()
     {
-        return '{123e4567-e89b-42d3-a456-426614174000}';
+        return self::$guid;
     }
 
     public function getDisplayName()
@@ -416,7 +468,7 @@ try {
             'domains' => array(),
         ))
     );
-    $stateStore = new Modules_SkamasleOls_StateStore(
+    $stateStore = new TestStateStore(
         $stateFile,
         new Modules_SkamasleOls_DesiredStateValidator()
     );
@@ -464,6 +516,11 @@ try {
         array(array('user' => 'apache', 'group' => 'apache')),
         $configManager->identitySyncs,
         'Install command must normalize the OLS server identity'
+    );
+    assertSameValue(
+        array(array('user' => 'apache', 'group' => 'apache')),
+        $configManager->exampleIdentitySyncs,
+        'Install command must normalize the OLS Example/html ownership'
     );
     assertSameValue(
         1,
@@ -660,10 +717,120 @@ try {
         'Cache toggle must log its completion'
     );
     assertSameValue(
-        $domainLookupsBeforeCache,
+        $domainLookupsBeforeCache + 1,
         pm_Domain::$getAllCalls,
-        'Privileged cache command must not query the Plesk domain API'
+        'Privileged cache command must refresh the domain from Plesk'
     );
+    $lsapiSettings = array(
+        'maxConnections' => 32,
+        'children' => 24,
+        'instances' => 2,
+        'backlog' => 300,
+        'initTimeout' => 75,
+        'retryTimeout' => 3,
+        'persistentConnection' => false,
+        'responseBuffering' => true,
+    );
+    $lsapi = $command->run(array(
+        'set-domain-lsapi',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        json_encode($lsapiSettings),
+    ));
+    assertSameValue(0, $lsapi['exitCode'], 'LSAPI update must succeed');
+    assertSameValue(
+        $lsapiSettings,
+        $lsapi['payload']['lsapi'],
+        'LSAPI update must return normalized settings'
+    );
+    assertSameValue(
+        $lsapiSettings,
+        $configManager->lsapiWrites[count($configManager->lsapiWrites) - 1],
+        'LSAPI update must rewrite the vhost config'
+    );
+    $stateAfterLsapi = json_decode((string) file_get_contents($stateFile), true);
+    assertSameValue(
+        $lsapiSettings,
+        $stateAfterLsapi['domains'][0]['php']['lsapi'],
+        'LSAPI update must persist settings in desired state'
+    );
+    assertSameValue(
+        'set-domain-lsapi.done',
+        $configManager->logEntries[count($configManager->logEntries) - 1]['event'],
+        'LSAPI update must log its completion'
+    );
+    $lsapiDomainPayload = array(
+        'guid' => '123e4567-e89b-42d3-a456-426614174000',
+        'pleskId' => 10,
+        'name' => 'example.test',
+        'documentRoot' => '/var/www/vhosts/example.test/httpdocs',
+        'vhostRoot' => '/var/www/vhosts/example.test',
+        'systemUser' => 'example',
+        'systemGroup' => 'psacln',
+        'phpHandlerId' => 'plesk-php84-fpm',
+        'phpVersion' => '8.4',
+        'cacheEnabled' => true,
+        'requestedRouting' => 'ols',
+    );
+    $clearCallsBeforePayloadUpdate = count($configManager->clearCalls);
+    pm_Domain::$available = false;
+    $lsapiFromPayload = $command->run(array(
+        'set-domain-lsapi',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        json_encode($lsapiSettings),
+        'example.test',
+        json_encode($lsapiDomainPayload),
+    ));
+    pm_Domain::$available = true;
+    assertSameValue(
+        0,
+        $lsapiFromPayload['exitCode'],
+        'LSAPI update must use the controller payload when pm_Domain is unavailable'
+    );
+    assertSameValue(
+        $clearCallsBeforePayloadUpdate,
+        count($configManager->clearCalls),
+        'LSAPI payload update must not clear an existing domain'
+    );
+    $stateStore->failNextWrite = true;
+    $lsapiConflictRetry = $command->run(array(
+        'set-domain-lsapi',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        json_encode($lsapiSettings),
+        'example.test',
+        json_encode($lsapiDomainPayload),
+    ));
+    assertSameValue(
+        0,
+        $lsapiConflictRetry['exitCode'],
+        'LSAPI update must retry after a desired-state generation conflict'
+    );
+    $clearCallsBeforeNameFallback = count($configManager->clearCalls);
+    $originalGuid = TestPleskDomain::$guid;
+    TestPleskDomain::$guid = '{fedcba98-7654-4a10-8edc-ba9876543210}';
+    $lsapiByName = $command->run(array(
+        'set-domain-lsapi',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        json_encode($lsapiSettings),
+        'example.test',
+    ));
+    assertSameValue(
+        0,
+        $lsapiByName['exitCode'],
+        'LSAPI update must resolve a live domain by name when the GUID changed'
+    );
+    assertSameValue(
+        $clearCallsBeforeNameFallback,
+        count($configManager->clearCalls),
+        'Name fallback must not clear stale artifacts for an existing domain'
+    );
+    TestPleskDomain::$guid = $originalGuid;
+    $invalidLsapi = $command->run(array(
+        'set-domain-lsapi',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        json_encode($lsapiSettings + array('unknown' => 1)),
+    ));
+    assertSameValue(64, $invalidLsapi['exitCode'], 'Unknown LSAPI settings must fail');
+
     assertSameValue(
         3,
         count($configManager->cacheModuleSyncs),
@@ -687,6 +854,30 @@ try {
         $lastRoutingWrite,
         'Listener port update must rewrite the active domain routing config'
     );
+
+    pm_Domain::$available = false;
+    $staleCache = $command->run(array(
+        'set-domain-cache',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        '0',
+    ));
+    assertSameValue(
+        2,
+        $staleCache['exitCode'],
+        'A missing Plesk domain must fail closed'
+    );
+    assertSameValue(
+        true,
+        !empty($configManager->clearCalls),
+        'A missing Plesk domain must clear stale artifacts'
+    );
+    $stateAfterCleanup = json_decode((string) file_get_contents($stateFile), true);
+    assertSameValue(
+        0,
+        count($stateAfterCleanup['domains']),
+        'Missing domains must be removed from desired state'
+    );
+    pm_Domain::$available = true;
 
     $unknown = $command->run(array('shell'));
     assertSameValue(64, $unknown['exitCode'], 'Unknown command must be rejected');

@@ -3,6 +3,19 @@
 Build releases are generated incrementally. The release number identifies the
 exact ZIP artifact and does not replace earlier builds.
 
+## 0.1.1-beta
+
+- Move managed domain files to the standard OLS layout under
+  `/usr/local/lsws/conf/vhosts/<domain>/vhconf.conf`.
+- Refresh the domain panel so it stays closer to the current OLS staging
+  state.
+- Add per-domain LSAPI tuning in the panel so each domain can use its own
+  process and timeout settings.
+- Simplify the domain actions in the UI and keep `Disable OLS` as the main
+  cleanup path.
+- Improve cleanup when a domain no longer exists in Plesk.
+- Keep the OLS Example directory ownership aligned with `apache:apache`.
+
 ## 0.1.0-11
 
 - Add a POST-backed action that installs OpenLiteSpeed.

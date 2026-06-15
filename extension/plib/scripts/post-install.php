@@ -11,7 +11,6 @@ $runtimeDirectory = $stateDirectory . '/run';
 $runtimeRoots = array(
     $stateDirectory,
     $stateDirectory . '/logs',
-    $stateDirectory . '/vhosts',
     $stateDirectory . '/php',
     $runtimeDirectory,
     $runtimeDirectory . '/lsphp',

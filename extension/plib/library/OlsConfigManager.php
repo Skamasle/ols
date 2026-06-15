@@ -71,6 +71,15 @@ class Modules_SkamasleOls_OlsConfigManager
 
     public function getVhostConfigPath($identifier)
     {
+        $directory = false !== strpos((string) $identifier, '.')
+            ? $this->sanitizeDomainName($identifier)
+            : $this->sanitizeIdentifier($identifier);
+
+        return $this->serverRoot . '/vhosts/' . $directory . '/vhconf.conf';
+    }
+
+    public function getLegacyVhostConfigPath($identifier)
+    {
         return $this->stateRoot . '/vhosts/'
             . $this->sanitizeIdentifier($identifier) . '/vhconf.conf';
     }
@@ -105,7 +114,10 @@ class Modules_SkamasleOls_OlsConfigManager
     public function getDomainRootPath(array $domain)
     {
         if (!empty($domain['vhostRoot'])) {
-            return rtrim((string) $domain['vhostRoot'], '/');
+            $vhostRoot = rtrim((string) $domain['vhostRoot'], '/');
+            if (is_dir($vhostRoot) && !is_link($vhostRoot)) {
+                return $vhostRoot;
+            }
         }
 
         return dirname(rtrim((string) $domain['documentRoot'], '/'));
@@ -133,7 +145,9 @@ class Modules_SkamasleOls_OlsConfigManager
         $vhostPath = $this->getVhostPath(
             null !== $domainName ? $domainName : $identifier
         );
-        $vhostConfigPath = $this->getVhostConfigPath($identifier);
+        $vhostConfigPath = $this->getVhostConfigPath(
+            null !== $domainName ? $domainName : $identifier
+        );
         $routingPath = $this->getRoutingPath($identifier);
 
         return array(
@@ -152,8 +166,8 @@ class Modules_SkamasleOls_OlsConfigManager
         $this->ensureDirectory($this->configRoot);
         $this->ensureDirectory($this->configRoot . '/listeners');
         $this->ensureDirectory($this->configRoot . '/vhosts');
+        $this->ensureDirectory($this->serverRoot . '/vhosts');
         $this->ensureDirectory($this->getListenerSslDirectory());
-        $this->ensureDirectory($this->stateRoot . '/vhosts');
         $this->ensureDirectory($this->stateRoot . '/php');
         $this->ensureDirectory($this->stateRoot . '/nginx-routing');
         $this->ensureDirectoryWithMode($this->getSocketDirectory(), 01777);
@@ -454,11 +468,18 @@ class Modules_SkamasleOls_OlsConfigManager
     public function writeVhostConfig(array $domain)
     {
         $this->ensureDomainLayout($domain);
-        $identifier = isset($domain['guid']) ? $domain['guid'] : $domain['name'];
-        $path = $this->getVhostConfigPath($identifier);
+        $path = $this->getVhostConfigPath($domain['name']);
         $content = $this->renderVhostConfig($domain);
         $result = $this->writeAtomic($path, $content, 0644);
         $result['path'] = $path;
+        if (!empty($result['configured']) && !empty($domain['guid'])) {
+            $legacyPath = $this->getLegacyVhostConfigPath($domain['guid']);
+            if ($legacyPath !== $path && is_file($legacyPath)) {
+                $legacyResult = $this->writeAtomic($legacyPath, $content, 0644);
+                $legacyResult['path'] = $legacyPath;
+                $result['legacySync'] = $legacyResult;
+            }
+        }
         return $result;
     }
 
@@ -510,13 +531,17 @@ class Modules_SkamasleOls_OlsConfigManager
         $paths = array();
         if (null !== $name) {
             $paths[] = $this->getVhostPath($name);
+            $paths[] = $this->getVhostPath($name) . '0';
             $paths[] = $this->getRoutingPath($name);
         }
         if (null !== $guid) {
             $paths[] = $this->getVhostPath($guid);
             $paths[] = $this->getRoutingPath($guid);
-            $paths[] = $this->getVhostConfigPath($guid);
+            $paths[] = $this->getLegacyVhostConfigPath($guid);
             $paths[] = $this->getVhostPath($guid) . '0';
+        }
+        if (null !== $name) {
+            $paths[] = $this->getVhostConfigPath($name);
         }
 
         $removed = array();
@@ -533,8 +558,14 @@ class Modules_SkamasleOls_OlsConfigManager
 
         if (null !== $guid) {
             $this->removeEmptyParentDirectories(
-                dirname($this->getVhostConfigPath($guid)),
+                dirname($this->getLegacyVhostConfigPath($guid)),
                 $this->stateRoot
+            );
+        }
+        if (null !== $name) {
+            $this->removeEmptyParentDirectories(
+                dirname($this->getVhostConfigPath($name)),
+                $this->serverRoot . '/vhosts'
             );
         }
 
@@ -582,7 +613,7 @@ class Modules_SkamasleOls_OlsConfigManager
 
         $this->ensureDomainLayout($domain);
         $this->appendLog('stage-domain.layout-ok', array(
-            'vhostRoot' => dirname($this->getVhostConfigPath($domain['guid'])),
+            'vhostRoot' => dirname($this->getVhostConfigPath($domain['name'])),
             'runtimeRoot' => $this->runtimeRoot . '/lsphp',
         ));
 
@@ -632,6 +663,16 @@ class Modules_SkamasleOls_OlsConfigManager
             'path' => $vhostResult['path'],
             'file' => $this->diagnosePath($vhostResult['path']),
         ));
+        $legacyPath = $this->getLegacyVhostConfigPath($domain['guid']);
+        if ($this->removeFileIfManaged($legacyPath)) {
+            $this->removeEmptyParentDirectories(
+                dirname($legacyPath),
+                $this->stateRoot
+            );
+            $this->appendLog('stage-domain.legacy-vhost-removed', array(
+                'path' => $legacyPath,
+            ));
+        }
 
         $this->appendLog('stage-domain.done', array(
             'domain' => isset($domain['name']) ? $domain['name'] : null,
@@ -702,9 +743,9 @@ class Modules_SkamasleOls_OlsConfigManager
     private function renderVhost(array $domain)
     {
         $name = isset($domain['name']) ? (string) $domain['name'] : 'unknown.local';
-        $guid = isset($domain['guid']) ? (string) $domain['guid'] : 'unknown';
         $vhostRoot = $this->getDomainRootPath($domain);
-        $configPath = $this->getVhostConfigPath($guid);
+        $configPath = '$SERVER_ROOT/conf/vhosts/'
+            . $this->sanitizeDomainName($name) . '/vhconf.conf';
 
         return implode(PHP_EOL, array(
             '# Managed by skamasle-ols',
@@ -874,6 +915,11 @@ class Modules_SkamasleOls_OlsConfigManager
         $php = isset($domain['php']) && is_array($domain['php'])
             ? $domain['php']
             : array();
+        $lsapi = $this->normalizeLsapiSettings(
+            isset($php['lsapi']) && is_array($php['lsapi'])
+                ? $php['lsapi']
+                : array()
+        );
         $socket = isset($php['socket'])
             ? (string) $php['socket']
             : $this->getSocketPath($guid);
@@ -917,21 +963,21 @@ class Modules_SkamasleOls_OlsConfigManager
             'extProcessor lsphp {',
             '    type lsapi',
             '    address ' . $socketAddress,
-            '    maxConns 10',
-            '    env PHP_LSAPI_CHILDREN=10',
+            '    maxConns ' . $lsapi['maxConnections'],
+            '    env PHP_LSAPI_CHILDREN=' . $lsapi['children'],
             '    env PHPRC=' . $phpIniDir,
             '    env LSPHP_ENABLE_USER_INI=on',
             '    env HTTPS=on',
             '    env SERVER_PORT=443',
             '    env REQUEST_SCHEME=https',
-            '    initTimeout 60',
-            '    retryTimeout 0',
-            '    persistConn 1',
-            '    respBuffer 0',
+            '    initTimeout ' . $lsapi['initTimeout'],
+            '    retryTimeout ' . $lsapi['retryTimeout'],
+            '    persistConn ' . ($lsapi['persistentConnection'] ? '1' : '0'),
+            '    respBuffer ' . ($lsapi['responseBuffering'] ? '1' : '0'),
             '    autoStart 1',
             '    path ' . $lsphpBinary,
-            '    backlog 100',
-            '    instances 1',
+            '    backlog ' . $lsapi['backlog'],
+            '    instances ' . $lsapi['instances'],
             '    extUser ' . $systemUser,
             '    extGroup ' . $systemGroup,
             '}',
@@ -947,6 +993,33 @@ class Modules_SkamasleOls_OlsConfigManager
             '',
             $this->renderVhostCacheModule($cacheEnabled, $cachePath),
         ));
+    }
+
+    private function normalizeLsapiSettings(array $settings)
+    {
+        return array(
+            'maxConnections' => isset($settings['maxConnections'])
+                ? (int) $settings['maxConnections']
+                : 10,
+            'children' => isset($settings['children'])
+                ? (int) $settings['children']
+                : 10,
+            'instances' => isset($settings['instances'])
+                ? (int) $settings['instances']
+                : 1,
+            'backlog' => isset($settings['backlog'])
+                ? (int) $settings['backlog']
+                : 100,
+            'initTimeout' => isset($settings['initTimeout'])
+                ? (int) $settings['initTimeout']
+                : 60,
+            'retryTimeout' => isset($settings['retryTimeout'])
+                ? (int) $settings['retryTimeout']
+                : 0,
+            'persistentConnection' => !array_key_exists('persistentConnection', $settings)
+                || !empty($settings['persistentConnection']),
+            'responseBuffering' => !empty($settings['responseBuffering']),
+        );
     }
 
     private function serverCacheModuleBlock()
@@ -1120,8 +1193,8 @@ class Modules_SkamasleOls_OlsConfigManager
         $guid = $this->sanitizeIdentifier($domain['guid']);
         $name = $this->sanitizeDomainName($domain['name']);
         $this->ensureDirectoryWithMode($this->stateRoot, 0755);
-        $this->ensureDirectoryWithMode($this->stateRoot . '/vhosts', 0755);
-        $this->ensureDirectoryWithMode($this->stateRoot . '/vhosts/' . $guid, 0755);
+        $this->ensureDirectoryWithMode($this->serverRoot . '/vhosts', 0755);
+        $this->ensureDirectoryWithMode($this->serverRoot . '/vhosts/' . $name, 0755);
         $this->ensureDirectoryWithMode($this->stateRoot . '/php', 0755);
         $this->ensureDirectoryWithMode($this->stateRoot . '/php/' . $guid, 0750);
         $this->ensureDirectoryWithMode($this->runtimeRoot, 0755);
@@ -1259,6 +1332,49 @@ class Modules_SkamasleOls_OlsConfigManager
         return array(
             'uid' => $uid,
             'gid' => $gid,
+            'user' => $user,
+            'group' => $group,
+        );
+    }
+
+    public function syncExampleVhostIdentity($user = 'apache', $group = 'apache')
+    {
+        $user = $this->normalizeAccountName($user, 'user');
+        $group = $this->normalizeAccountName($group, 'group');
+        $path = '/usr/local/lsws/Example/html';
+        if (!is_dir($path) || is_link($path)) {
+            return array(
+                'available' => false,
+                'configured' => false,
+                'path' => $path,
+                'error' => 'OLS Example/html directory was not found.',
+            );
+        }
+
+        $changed = false;
+        if (!chown($path, $user)) {
+            return array(
+                'available' => false,
+                'configured' => false,
+                'path' => $path,
+                'error' => 'Unable to set OLS Example/html owner.' . $this->lastErrorSuffix(),
+            );
+        }
+        $changed = true;
+        if (!chgrp($path, $group)) {
+            return array(
+                'available' => false,
+                'configured' => false,
+                'path' => $path,
+                'error' => 'Unable to set OLS Example/html group.' . $this->lastErrorSuffix(),
+            );
+        }
+
+        return array(
+            'available' => true,
+            'configured' => true,
+            'changed' => $changed,
+            'path' => $path,
             'user' => $user,
             'group' => $group,
         );

@@ -328,6 +328,21 @@ class IndexController extends pm_Controller_Action
             $domain->setSetting('skamasle-ols.routing', $routing);
             $webServer = new pm_WebServer();
             $webServer->updateDomainConfiguration($domain);
+            if ('native' === $routing && 'ols' === $previousRouting) {
+                $cleanupResult = $client->run(array('reset-domain-vhost', $guid));
+                if (empty($cleanupResult['available'])) {
+                    throw new RuntimeException(
+                        isset($cleanupResult['error'])
+                            ? $cleanupResult['error']
+                            : 'Unable to clear OLS domain artifacts.'
+                    );
+                }
+                $domain->setSetting('skamasle-ols.prepared', '0');
+                $domain->setSetting('skamasle-ols.lscache', '0');
+                $domain->setSetting('skamasle-ols.lsapi', '');
+                $domain->setSetting('skamasle-ols.routing', 'native');
+                $message = 'Domain routing updated to native and OLS vhost removed.';
+            }
         } catch (Throwable $exception) {
             $domain->setSetting('skamasle-ols.routing', $previousRouting);
             $client->run(array(
@@ -461,6 +476,7 @@ class IndexController extends pm_Controller_Action
             'set-domain-cache',
             trim((string) $domain->getGuid(), '{}'),
             $enabled ? '1' : '0',
+            $domain->getName(),
         ));
         if (empty($result['available'])) {
             try {
@@ -485,6 +501,102 @@ class IndexController extends pm_Controller_Action
             $this->populateIndexView(
                 'LSCache ' . ($enabled ? 'enabled' : 'disabled')
                 . ' for ' . $domain->getName() . '.',
+                'success'
+            );
+        }
+
+        $this->_helper->viewRenderer->setScriptAction('index');
+    }
+
+    public function setDomainLsapiAction()
+    {
+        if (!$this->getRequest()->isPost()) {
+            $this->populateIndexView(
+                'Changing LSAPI settings requires a POST request.',
+                'warning'
+            );
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+
+        $guid = (string) $this->getRequest()->getPost('domain_guid', '');
+        $domainName = (string) $this->getRequest()->getPost('domain_name', '');
+        $domain = $this->findDomainByGuid($guid, $domainName);
+        if (null === $domain) {
+            $this->populateIndexView('Domain not found in Plesk.', 'error');
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+        if ('1' !== $domain->getSetting('skamasle-ols.prepared', '0')) {
+            $this->populateIndexView(
+                'Stage the OLS vhost before changing LSAPI settings.',
+                'warning'
+            );
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+
+        try {
+            $settings = $this->readDomainLsapiSettings();
+        } catch (Throwable $exception) {
+            $this->populateIndexView($exception->getMessage(), 'error');
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+        $settingsJson = json_encode($settings, JSON_UNESCAPED_SLASHES);
+        if (false === $settingsJson) {
+            $this->populateIndexView('Unable to encode LSAPI settings.', 'error');
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+
+        $previousSettings = (string) $domain->getSetting('skamasle-ols.lsapi', '');
+        $domainPayload = $this->buildDomainPayload($domain);
+        $domainPayloadJson = json_encode($domainPayload, JSON_UNESCAPED_SLASHES);
+        if (false === $domainPayloadJson) {
+            $this->populateIndexView('Unable to encode domain data.', 'error');
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+
+        try {
+            $domain->setSetting('skamasle-ols.lsapi', $settingsJson);
+        } catch (Throwable $exception) {
+            $this->populateIndexView(
+                'Plesk could not persist the LSAPI domain settings.',
+                'error'
+            );
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
+
+        $client = new Modules_SkamasleOls_EngineInstaller();
+        $result = $client->run(array(
+            'set-domain-lsapi',
+            trim((string) $domain->getGuid(), '{}'),
+            $settingsJson,
+            $domain->getName(),
+            $domainPayloadJson,
+        ));
+        if (empty($result['available'])) {
+            try {
+                $domain->setSetting('skamasle-ols.lsapi', $previousSettings);
+            } catch (Throwable $exception) {
+                error_log(
+                    '[skamasle-ols] Unable to roll back LSAPI domain setting: '
+                    . $exception->getMessage()
+                );
+            }
+            $this->populateIndexView(
+                (isset($result['error']) ? $result['error'] : 'Unknown error')
+                . (!empty($result['logPath'])
+                    ? ' Debug log: ' . $result['logPath'] . '.'
+                    : ''),
+                'error'
+            );
+        } else {
+            $this->populateIndexView(
+                'LSAPI settings updated for ' . $domain->getName() . '.',
                 'success'
             );
         }
@@ -811,6 +923,8 @@ class IndexController extends pm_Controller_Action
             . 'index.php/index/set-listener-port';
         $this->view->setDomainCacheUrl = pm_Context::getBaseUrl()
             . 'index.php/index/set-domain-cache';
+        $this->view->setDomainLsapiUrl = pm_Context::getBaseUrl()
+            . 'index.php/index/set-domain-lsapi';
         $this->view->installTemplateUrl = pm_Context::getBaseUrl()
             . 'index.php/index/install-template';
         $this->view->scanDomainHtaccessUrl = pm_Context::getBaseUrl()
@@ -819,8 +933,6 @@ class IndexController extends pm_Controller_Action
             . 'index.php/index/prepare-domain-vhost';
         $this->view->stageAndEnableDomainVhostUrl = pm_Context::getBaseUrl()
             . 'index.php/index/stage-and-enable-domain-vhost';
-        $this->view->resetDomainVhostUrl = pm_Context::getBaseUrl()
-            . 'index.php/index/reset-domain-vhost';
         $this->view->setDomainRoutingUrl = pm_Context::getBaseUrl()
             . 'index.php/index/set-domain-routing';
         $this->view->stylesheetUrl = pm_Context::getBaseUrl()
@@ -987,12 +1099,74 @@ class IndexController extends pm_Controller_Action
                 : 'psacln',
             'phpHandlerId' => $handlerId,
             'cacheEnabled' => '1' === $domain->getSetting('skamasle-ols.lscache', '0'),
+            'lsapi' => $this->domainLsapiSettings($domain),
+            'requestedRouting' => $domain->getSetting(
+                'skamasle-ols.routing',
+                'native'
+            ),
         );
         if (null !== $phpVersion) {
             $payload['phpVersion'] = $phpVersion;
         }
 
         return $payload;
+    }
+
+    private function readDomainLsapiSettings()
+    {
+        $fields = array(
+            'maxConnections' => array('lsapi_max_connections', 1, 1000),
+            'children' => array('lsapi_children', 1, 1000),
+            'instances' => array('lsapi_instances', 1, 100),
+            'backlog' => array('lsapi_backlog', 1, 10000),
+            'initTimeout' => array('lsapi_init_timeout', 1, 3600),
+            'retryTimeout' => array('lsapi_retry_timeout', 0, 3600),
+        );
+        $settings = array();
+        foreach ($fields as $key => $definition) {
+            $raw = trim((string) $this->getRequest()->getPost($definition[0], ''));
+            if (!preg_match('/^\d+$/', $raw)) {
+                throw new InvalidArgumentException(
+                    'LSAPI setting ' . $key . ' must be an integer.'
+                );
+            }
+            $value = (int) $raw;
+            if ($value < $definition[1] || $value > $definition[2]) {
+                throw new InvalidArgumentException(
+                    'LSAPI setting ' . $key . ' is outside the allowed range.'
+                );
+            }
+            $settings[$key] = $value;
+        }
+        $settings['persistentConnection'] = '1' === (string) $this->getRequest()
+            ->getPost('lsapi_persistent_connection', '0');
+        $settings['responseBuffering'] = '1' === (string) $this->getRequest()
+            ->getPost('lsapi_response_buffering', '0');
+
+        return $settings;
+    }
+
+    private function domainLsapiSettings($domain)
+    {
+        $defaults = array(
+            'maxConnections' => 10,
+            'children' => 10,
+            'instances' => 1,
+            'backlog' => 100,
+            'initTimeout' => 60,
+            'retryTimeout' => 0,
+            'persistentConnection' => true,
+            'responseBuffering' => false,
+        );
+        $decoded = json_decode(
+            (string) $domain->getSetting('skamasle-ols.lsapi', ''),
+            true
+        );
+        if (!is_array($decoded)) {
+            return $defaults;
+        }
+
+        return array_merge($defaults, array_intersect_key($decoded, $defaults));
     }
 
     private function restoreNativeRouting(

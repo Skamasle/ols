@@ -278,6 +278,7 @@ class Modules_SkamasleOls_DesiredStateValidator
                 'lsphpBinary',
                 'socket',
             ),
+            array('lsapi'),
             $path . '.php'
         );
         $this->validateHandlerId(
@@ -305,6 +306,49 @@ class Modules_SkamasleOls_DesiredStateValidator
             );
         }
 
+        if (isset($php['lsapi'])) {
+            $this->validateLsapi($php['lsapi'], $path . '.php.lsapi');
+        }
+    }
+
+    private function validateLsapi($lsapi, $path)
+    {
+        if (!is_array($lsapi)) {
+            throw new InvalidArgumentException($path . ' must be an object.');
+        }
+        $this->assertKeys(
+            $lsapi,
+            array(
+                'maxConnections',
+                'children',
+                'instances',
+                'backlog',
+                'initTimeout',
+                'retryTimeout',
+                'persistentConnection',
+                'responseBuffering',
+            ),
+            $path
+        );
+        $limits = array(
+            'maxConnections' => array(1, 1000),
+            'children' => array(1, 1000),
+            'instances' => array(1, 100),
+            'backlog' => array(1, 10000),
+            'initTimeout' => array(1, 3600),
+            'retryTimeout' => array(0, 3600),
+        );
+        foreach ($limits as $key => $range) {
+            $this->assertInteger($lsapi[$key], $path . '.' . $key, $range[0]);
+            if ($lsapi[$key] > $range[1]) {
+                throw new InvalidArgumentException($path . '.' . $key . ' is too large.');
+            }
+        }
+        foreach (array('persistentConnection', 'responseBuffering') as $key) {
+            if (!is_bool($lsapi[$key])) {
+                throw new InvalidArgumentException($path . '.' . $key . ' must be boolean.');
+            }
+        }
     }
 
     private function normalizeGuid($value, $path)

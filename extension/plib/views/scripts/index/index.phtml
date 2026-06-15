@@ -531,6 +531,7 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                 <th>.htaccess</th>
                                 <th>Readiness</th>
                                 <th>LSCache</th>
+                                <th>LSAPI</th>
                                 <th>Routing</th>
                             </tr>
                         </thead>
@@ -545,6 +546,9 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                             $cacheButtonLabel = $cacheEnabled
                                 ? 'Disable LSCache'
                                 : 'Enable LSCache';
+                            $lsapi = isset($domain['lsapi']) && is_array($domain['lsapi'])
+                                ? $domain['lsapi']
+                                : array();
                             ?>
                             <tr>
                                 <td class="skamasle-ols-domain">
@@ -662,6 +666,53 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                     </div>
                                 </td>
                                 <td>
+                                    <?php if (!empty($domain['prepared'])): ?>
+                                        <details class="skamasle-ols-details">
+                                            <summary>
+                                                <?php echo $escape(
+                                                    $lsapi['children'] . ' workers / '
+                                                    . $lsapi['maxConnections'] . ' connections'
+                                                ); ?>
+                                            </summary>
+                                            <form method="post" action="<?php echo $escape($this->setDomainLsapiUrl); ?>" class="skamasle-ols-field" style="margin-top:10px;">
+                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
+                                                <label>Max connections
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_max_connections" min="1" max="1000" value="<?php echo $escape($lsapi['maxConnections']); ?>" required="required">
+                                                </label>
+                                                <label>PHP workers
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_children" min="1" max="1000" value="<?php echo $escape($lsapi['children']); ?>" required="required">
+                                                </label>
+                                                <label>Instances
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_instances" min="1" max="100" value="<?php echo $escape($lsapi['instances']); ?>" required="required">
+                                                </label>
+                                                <label>Backlog
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_backlog" min="1" max="10000" value="<?php echo $escape($lsapi['backlog']); ?>" required="required">
+                                                </label>
+                                                <label>Init timeout
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_init_timeout" min="1" max="3600" value="<?php echo $escape($lsapi['initTimeout']); ?>" required="required">
+                                                </label>
+                                                <label>Retry timeout
+                                                    <input class="skamasle-ols-input" type="number" name="lsapi_retry_timeout" min="0" max="3600" value="<?php echo $escape($lsapi['retryTimeout']); ?>" required="required">
+                                                </label>
+                                                <label>
+                                                    <input type="checkbox" name="lsapi_persistent_connection" value="1" <?php echo !empty($lsapi['persistentConnection']) ? 'checked="checked"' : ''; ?>>
+                                                    Persistent connection
+                                                </label>
+                                                <label>
+                                                    <input type="checkbox" name="lsapi_response_buffering" value="1" <?php echo !empty($lsapi['responseBuffering']) ? 'checked="checked"' : ''; ?>>
+                                                    Response buffering
+                                                </label>
+                                                <button type="submit" class="btn skamasle-ols-btn-primary">Save LSAPI</button>
+                                            </form>
+                                        </details>
+                                    <?php else: ?>
+                                        <span class="skamasle-ols-inline-note">
+                                            Stage the OLS vhost first.
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
                                     <div class="skamasle-ols-domain-actions">
                                         <span class="skamasle-ols-pill <?php echo $pillClass('ols' === $domain['requestedRouting']); ?>">
                                             <?php echo $escape($routingLabel); ?>
@@ -686,16 +737,10 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                                     Rebuild OLS vhost
                                                 </button>
                                             </form>
-                                            <form method="post" action="<?php echo $escape($this->resetDomainVhostUrl); ?>">
-                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <button type="submit" class="btn skamasle-ols-btn-danger">
-                                                    Reset OLS vhost
-                                                </button>
-                                            </form>
                                             <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
                                                 <input type="hidden" name="routing" value="<?php echo $escape('ols' === $domain['requestedRouting'] ? 'native' : 'ols'); ?>">
-                                                <button type="submit" class="btn <?php echo 'ols' === $domain['requestedRouting'] ? '' : 'skamasle-ols-btn-primary'; ?>">
+                                                <button type="submit" class="btn <?php echo 'ols' === $domain['requestedRouting'] ? 'skamasle-ols-btn-danger' : 'skamasle-ols-btn-primary'; ?>">
                                                     <?php echo $escape('ols' === $domain['requestedRouting'] ? 'Disable OLS' : 'Enable OLS'); ?>
                                                 </button>
                                             </form>
@@ -705,7 +750,7 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                             if ($domain['readiness']['acknowledgementRequired']) {
                                                 echo 'Future activation will require acknowledging compatibility warnings.';
                                             } else {
-                                                echo 'Vhost staging is available when OLS is installed.';
+                                                echo 'WebAdmin edits are allowed, but rebuilding from Plesk overwrites the managed vhost.';
                                             }
                                             ?>
                                         </span>

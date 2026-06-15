@@ -1,212 +1,136 @@
-// Package main implements the deprecated Skamasle OLS watcher prototype.
-//
-// It recursively watches /var/www/vhosts/*/httpdocs/ for .htaccess changes
-// and triggers a graceful OpenLiteSpeed reload with a 2-second debounce,
-// ensuring that high-frequency writes (e.g. WordPress plugin updates) only
-// cause a single reload.
-//
-// Resource target: < 15MB RAM with 5000+ vhosts via inotify.
 package main
 
 import (
 	"log"
 	"log/syslog"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
+	"skamasle-ols-agent/internal/eventqueue"
+	"skamasle-ols-agent/internal/htaccessscan"
+	"skamasle-ols-agent/internal/htaccesswatch"
+	"skamasle-ols-agent/internal/ols"
+	"skamasle-ols-agent/internal/reconcile"
+	"skamasle-ols-agent/internal/state"
 )
 
 const (
-	watchRoot    = "/var/www/vhosts"
-	httpdocsDir  = "httpdocs"
-	htaccessFile = ".htaccess"
-	lswsctrl     = "/usr/local/lsws/bin/lswsctrl"
-	debounceMs   = 2000 * time.Millisecond
-	syslogTag    = "skamasle-ols-watchdog"
+	watchRoot = "/var/www/vhosts"
+	debounce  = 2 * time.Second
+	syslogTag = "skamasle-ols-agent"
 )
 
-var (
-	logger  *syslog.Writer
-	mu      sync.Mutex
-	timer   *time.Timer
-	reloads int64
-)
+var reloads int64
 
 func main() {
-	// Set up syslog
-	var err error
-	logger, err = syslog.New(syslog.LOG_DAEMON|syslog.LOG_INFO, syslogTag)
+	logger, err := syslog.New(syslog.LOG_DAEMON|syslog.LOG_INFO, syslogTag)
 	if err != nil {
 		log.Fatalf("Cannot open syslog: %v", err)
 	}
 	defer logger.Close()
 
-	logInfo("Starting Skamasle OLS .htaccess watchdog")
+	info := func(msg string) { _ = logger.Info(msg) }
+	warn := func(msg string) { _ = logger.Warning(msg) }
+	fatal := func(msg string) {
+		_ = logger.Err(msg)
+		os.Exit(1)
+	}
 
-	watcher, err := fsnotify.NewWatcher()
+	info("Starting Skamasle OLS .htaccess watcher")
+
+	watcher, err := htaccesswatch.New(watchRoot)
 	if err != nil {
-		logFatal("Cannot create fsnotify watcher: " + err.Error())
+		fatal("Cannot create watcher: " + err.Error())
 	}
 	defer watcher.Close()
 
-	// Walk vhosts and add httpdocs directories to watcher
-	if err := walkAndWatch(watcher); err != nil {
-		logFatal("Initial vhost walk failed: " + err.Error())
+	if err := watcher.Rescan(); err != nil {
+		fatal("Initial vhost scan failed: " + err.Error())
 	}
 
-	// Handle OS signals for graceful shutdown
+	scheduler := eventqueue.New(debounce)
+	defer scheduler.Close()
+
+	stateStore := state.New("/usr/local/psa/var/modules/skamasle-ols/desired-state.json")
+	reconciler := reconcile.New(stateStore, htaccessscan.New())
+	olsManager := ols.New(nil)
+
+	go func() {
+		for event := range watcher.Events() {
+			info("Detected .htaccess change: " + event.Path + " [" + event.Op.String() + "]")
+			scheduler.Submit(eventqueue.Event{
+				Key:    event.Key,
+				Path:   event.Path,
+				Reason: "htaccess-change",
+				Op:     event.Op.String(),
+				When:   event.When,
+				Root:   event.VhostRoot,
+				Domain: event.Domain,
+			})
+		}
+	}()
+
+	go func() {
+		for err := range watcher.Errors() {
+			warn("Watcher error: " + err.Error())
+		}
+	}()
+
+	go func() {
+		for event := range scheduler.Events() {
+			decision, err := reconciler.Decide(event)
+			if err != nil {
+				warn("Reconcile failed for " + event.Key + ": " + err.Error())
+				continue
+			}
+
+			switch decision.Action {
+			case reconcile.ActionReload:
+				if err := olsManager.Validate(); err != nil {
+					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
+					continue
+				}
+				count := atomic.AddInt64(&reloads, 1)
+				info("Reload requested for " + decision.DomainName + " after " + event.Reason + " (reloads: " + itoa64(count) + ")")
+				if err := olsManager.Reload(); err != nil {
+					warn("OLS reload failed for " + event.Key + ": " + err.Error())
+				}
+			case reconcile.ActionNoop:
+				info("No reconcile needed for " + event.Key + ": " + decision.Reason)
+			case reconcile.ActionReview:
+				warn("Holding reload for " + decision.DomainName + ": .htaccess requires review (" + decision.Reason + ")")
+			case reconcile.ActionBlocked:
+				warn("Blocking reload for " + decision.DomainName + ": " + decision.Reason)
+			case reconcile.ActionMissing:
+				warn("Skipping reconcile for " + event.Key + ": " + decision.Reason)
+			default:
+				warn("Unknown reconcile action for " + event.Key + ": " + string(decision.Action))
+			}
+		}
+	}()
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 
-	logInfo("Watchdog active. Monitoring .htaccess changes...")
+	info("Watcher active. Monitoring .htaccess changes...")
 
 	for {
-		select {
-		case event, ok := <-watcher.Events:
-			if !ok {
-				logInfo("Watcher channel closed, exiting")
-				return
+		switch sig := <-sigCh; sig {
+		case syscall.SIGHUP:
+			info("SIGHUP received, rescanning vhosts")
+			if err := watcher.Rescan(); err != nil {
+				warn("Rescan failed: " + err.Error())
 			}
-			handleEvent(watcher, event)
-
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return
-			}
-			logWarn("Watcher error: " + err.Error())
-
-		case sig := <-sigCh:
-			switch sig {
-			case syscall.SIGHUP:
-				// Re-scan vhosts on SIGHUP (e.g. new domain added)
-				logInfo("SIGHUP received — re-scanning vhosts")
-				if err := walkAndWatch(watcher); err != nil {
-					logWarn("Re-scan failed: " + err.Error())
-				}
-			default:
-				logInfo("Signal received, shutting down watchdog")
-				return
-			}
+		default:
+			info("Shutdown signal received")
+			return
 		}
 	}
 }
 
-// walkAndWatch recursively finds all httpdocs directories under watchRoot
-// and adds them (and their subdirectories) to the fsnotify watcher.
-func walkAndWatch(watcher *fsnotify.Watcher) error {
-	added := 0
-	err := filepath.Walk(watchRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			// Skip unreadable paths (e.g. permission denied on vhost subdir)
-			return nil
-		}
-		if !info.IsDir() {
-			return nil
-		}
-
-		// Only watch directories that are inside an httpdocs tree
-		if strings.HasSuffix(path, "/"+httpdocsDir) || isUnderHTTPDocs(path) {
-			if watchErr := watcher.Add(path); watchErr != nil {
-				logWarn("Cannot watch " + path + ": " + watchErr.Error())
-			} else {
-				added++
-			}
-		}
-		return nil
-	})
-	logInfo("Watching " + itoa(added) + " directories under " + watchRoot)
-	return err
-}
-
-// isUnderHTTPDocs returns true if path is a descendant of an httpdocs directory.
-func isUnderHTTPDocs(path string) bool {
-	parts := strings.Split(path, string(os.PathSeparator))
-	for _, p := range parts {
-		if p == httpdocsDir {
-			return true
-		}
-	}
-	return false
-}
-
-// handleEvent processes a single fsnotify event.
-// It only acts on .htaccess files and uses a debounced reload.
-func handleEvent(watcher *fsnotify.Watcher, event fsnotify.Event) {
-	name := filepath.Base(event.Name)
-
-	// Watch new subdirectories as they are created
-	if event.Has(fsnotify.Create) {
-		info, err := os.Stat(event.Name)
-		if err == nil && info.IsDir() && isUnderHTTPDocs(event.Name) {
-			if err := watcher.Add(event.Name); err != nil {
-				logWarn("Cannot watch new dir " + event.Name + ": " + err.Error())
-			} else {
-				logInfo("Now watching new directory: " + event.Name)
-			}
-		}
-	}
-
-	// Filter: only care about .htaccess files
-	if name != htaccessFile {
-		return
-	}
-
-	if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
-		logInfo("Detected .htaccess change: " + event.Name + " [" + event.Op.String() + "]")
-		scheduleReload()
-	}
-}
-
-// scheduleReload resets the debounce timer. The OLS reload is only triggered
-// after debounceMs of inactivity, collapsing rapid bursts into a single reload.
-func scheduleReload() {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if timer != nil {
-		timer.Reset(debounceMs)
-		return
-	}
-
-	timer = time.AfterFunc(debounceMs, func() {
-		mu.Lock()
-		timer = nil
-		mu.Unlock()
-		triggerReload()
-	})
-}
-
-// triggerReload executes lswsctrl reload and logs the result.
-func triggerReload() {
-	reloads++
-	logInfo("Triggering OLS graceful reload (total reloads: " + itoa64(reloads) + ")")
-
-	cmd := exec.Command(lswsctrl, "reload")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		logWarn("lswsctrl reload failed: " + err.Error() + " — output: " + strings.TrimSpace(string(out)))
-	} else {
-		logInfo("OLS reload successful")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Logging helpers
-// ---------------------------------------------------------------------------
-
-func logInfo(msg string)  { _ = logger.Info(msg) }
-func logWarn(msg string)  { _ = logger.Warning(msg) }
-func logFatal(msg string) { _ = logger.Err(msg); os.Exit(1) }
-
-func itoa(n int) string { return strconv.Itoa(n) }
 func itoa64(n int64) string {
 	if n == 0 {
 		return "0"

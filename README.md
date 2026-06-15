@@ -2,6 +2,8 @@
 
 [Versión en español](LEEME.md)
 
+License: GNU General Public License v3.0. See [LICENSE](LICENSE).
+
 ## Warning
 
 Do not install this module in production.
@@ -25,7 +27,7 @@ nginx removal, or modification of files managed by Plesk.
 The project is currently split into two cooperating but independent systems:
 
 - the Plesk extension in `extension/`;
-- an optional future agent for `.htaccess` and Plesk event reconciliation.
+- an optional standalone agent for `.htaccess` and Plesk event reconciliation.
 
 The agent is not packaged in the extension ZIP yet. Both pieces can work
 together, but neither one depends on the other to exist at install time.
@@ -49,6 +51,10 @@ state is intentionally conservative:
 - it shows a domain inventory and the current routing state;
 - it validates whether a domain can move toward OLS;
 - it installs OpenLiteSpeed without replacing Apache or nginx;
+- it stores vhost configuration in the standard
+  `/usr/local/lsws/conf/vhosts/<domain>/vhconf.conf` layout;
+- it exposes per-domain LSAPI process, connection, backlog, timeout, and
+  buffering settings;
 - it keeps the native Plesk routing as the default fallback;
 - it stores the control-plane state needed for later activation work.
 
@@ -56,6 +62,11 @@ In practice, that means the extension is already useful as an inventory and
 preparation tool, but it is not yet a full migration system. The UI is built
 to surface what the platform can do now and what still needs operator review
 before a domain is routed to OLS.
+
+The standard vhost path keeps the generated virtual host visible and editable
+through OpenLiteSpeed WebAdmin. Manual WebAdmin changes are allowed, but the
+Plesk extension remains authoritative: rebuilding a domain vhost regenerates
+`vhconf.conf` and overwrites manual changes.
 
 ## Generate the Extension
 

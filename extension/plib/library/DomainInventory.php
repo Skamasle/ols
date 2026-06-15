@@ -75,6 +75,7 @@ class Modules_SkamasleOls_DomainInventory
                     'skamasle-ols.lscache',
                     '0'
                 );
+                $item['lsapi'] = $this->readLsapiSettings($domain);
                 $item['requestedRouting'] = $domain->getSetting(
                     'skamasle-ols.routing',
                     'native'
@@ -183,6 +184,32 @@ class Modules_SkamasleOls_DomainInventory
                 ? (string) $decoded['scanDepth']
                 : null,
         );
+    }
+
+    private function readLsapiSettings($domain)
+    {
+        $defaults = array(
+            'maxConnections' => 10,
+            'children' => 10,
+            'instances' => 1,
+            'backlog' => 100,
+            'initTimeout' => 60,
+            'retryTimeout' => 0,
+            'persistentConnection' => true,
+            'responseBuffering' => false,
+        );
+        if (!is_object($domain) || !method_exists($domain, 'getSetting')) {
+            return $defaults;
+        }
+        $decoded = json_decode(
+            (string) $domain->getSetting('skamasle-ols.lsapi', ''),
+            true
+        );
+        if (!is_array($decoded)) {
+            return $defaults;
+        }
+
+        return array_merge($defaults, array_intersect_key($decoded, $defaults));
     }
 
     private function notScannedHtaccessResult()

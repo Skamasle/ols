@@ -99,6 +99,23 @@ $dottedUser = validDesiredState();
 $dottedUser['domains'][0]['systemUser'] = 'analyzer.adw.es_t3ffr7y4qak';
 $validator->validate($dottedUser);
 
+$lsapiState = validDesiredState();
+$lsapiState['domains'][0]['php']['lsapi'] = array(
+    'maxConnections' => 20,
+    'children' => 16,
+    'instances' => 2,
+    'backlog' => 200,
+    'initTimeout' => 90,
+    'retryTimeout' => 5,
+    'persistentConnection' => true,
+    'responseBuffering' => false,
+);
+$validator->validate($lsapiState);
+
+$invalidLsapiState = $lsapiState;
+$invalidLsapiState['domains'][0]['php']['lsapi']['children'] = 0;
+assertInvalidState($invalidLsapiState, 'children must be an integer');
+
 $unknownProperty = validDesiredState();
 $unknownProperty['unexpected'] = true;
 assertInvalidState($unknownProperty, 'missing or unknown properties');

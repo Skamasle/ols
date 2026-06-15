@@ -110,8 +110,21 @@ try {
             'socket' => $manager->getSocketPath(
                 '123e4567-e89b-42d3-a456-426614174000'
             ),
+            'lsapi' => array(
+                'maxConnections' => 24,
+                'children' => 20,
+                'instances' => 2,
+                'backlog' => 250,
+                'initTimeout' => 90,
+                'retryTimeout' => 5,
+                'persistentConnection' => false,
+                'responseBuffering' => true,
+            ),
         ),
     );
+    $legacyVhostConfig = $manager->getLegacyVhostConfigPath($domain['guid']);
+    mkdir(dirname($legacyVhostConfig), 0755, true);
+    file_put_contents($legacyVhostConfig, "# Managed by skamasle-ols\nlegacy\n");
     $listener = $manager->writeListener(
         array(
             'bindAddress' => '127.0.0.1',
@@ -198,9 +211,9 @@ try {
         true,
         false !== strpos(
             $vhostContent,
-            'configFile ' . $stateRoot . '/vhosts/'
+            'configFile $SERVER_ROOT/conf/vhosts/example.test/vhconf.conf'
         ),
-        'Server vhost declaration must reference its config file'
+        'Server vhost declaration must use the WebAdmin-compatible OLS path'
     );
     assertSameValue(
         true,
@@ -213,6 +226,16 @@ try {
         'Vhost must run with per-vhost UID mode so lsphp uses the domain account'
     );
     $vhconfContent = file_get_contents($stage['vhostConfig']['path']);
+    assertSameValue(
+        $serverRoot . '/vhosts/example.test/vhconf.conf',
+        $stage['vhostConfig']['path'],
+        'Vhost config must live below the standard OLS vhosts tree'
+    );
+    assertSameValue(
+        false,
+        is_file($legacyVhostConfig),
+        'Staging must remove the previous module-state vhost config'
+    );
     assertSameValue(
         true,
         false !== strpos($vhconfContent, 'add lsapi:lsphp php'),
@@ -245,6 +268,14 @@ try {
         ),
         'Vhost config must use the Plesk php.ini directory'
     );
+    assertSameValue(true, false !== strpos($vhconfContent, 'maxConns 24'), 'LSAPI max connections must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'env PHP_LSAPI_CHILDREN=20'), 'LSAPI children must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'instances 2'), 'LSAPI instances must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'backlog 250'), 'LSAPI backlog must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'initTimeout 90'), 'LSAPI init timeout must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'retryTimeout 5'), 'LSAPI retry timeout must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'persistConn 0'), 'LSAPI persistent connections must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'respBuffer 1'), 'LSAPI response buffering must be configurable');
     assertSameValue(
         true,
         false !== strpos($vhconfContent, 'module cache {'),
@@ -347,6 +378,12 @@ try {
         $olsRouting['path'],
         'OLS routing config must use the domain name expected by the nginx template'
     );
+    file_put_contents($configRoot . '/vhosts/example.test.conf0', 'legacy backup');
+    assertSameValue(
+        true,
+        is_file($configRoot . '/vhosts/example.test.conf0'),
+        'Test must create a legacy backup file before cleanup'
+    );
     $cleanup = $manager->clearDomainArtifacts(
         $domain,
         array(
@@ -380,6 +417,11 @@ try {
         true,
         false === strpos(file_get_contents($listener['path']), 'map example.test'),
         'Cleanup must rewrite the listener without the staged domain'
+    );
+    assertSameValue(
+        false,
+        is_file($configRoot . '/vhosts/example.test.conf0'),
+        'Cleanup must remove the legacy backup file'
     );
     assertSameValue(
         true,

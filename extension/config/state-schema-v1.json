@@ -175,6 +175,58 @@
             },
             "socket": {
               "type": "string"
+            },
+            "lsapi": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "maxConnections",
+                "children",
+                "instances",
+                "backlog",
+                "initTimeout",
+                "retryTimeout",
+                "persistentConnection",
+                "responseBuffering"
+              ],
+              "properties": {
+                "maxConnections": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "children": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "instances": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "backlog": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "initTimeout": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3600
+                },
+                "retryTimeout": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 3600
+                },
+                "persistentConnection": {
+                  "type": "boolean"
+                },
+                "responseBuffering": {
+                  "type": "boolean"
+                }
+              }
             }
           }
         },

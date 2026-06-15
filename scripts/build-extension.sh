@@ -15,6 +15,7 @@ mkdir -p "${build_dir}"
 
 version="$(xmllint --xpath 'string(/module/version)' "${source_dir}/meta.xml")"
 source_release="$(xmllint --xpath 'string(/module/release)' "${source_dir}/meta.xml")"
+requested_archive_name="${SKAMASLE_OLS_ARCHIVE_NAME:-}"
 
 if [[ ! "${version}" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
     printf 'Invalid version in extension/meta.xml: %s\n' "${version}" >&2
@@ -26,22 +27,31 @@ if [[ ! "${source_release}" =~ ^[0-9]+$ ]]; then
     exit 1
 fi
 
-latest_release=$((source_release - 1))
-shopt -s nullglob
-for existing_archive in "${build_dir}/skamasle-ols-plesk-${version}-"*.zip; do
-    filename="${existing_archive##*/}"
-    if [[ "${filename}" =~ ^skamasle-ols-plesk-([0-9]+(\.[0-9]+){1,2})-([0-9]+)\.zip$ ]] \
-        && [[ "${BASH_REMATCH[1]}" == "${version}" ]]; then
-        release="${BASH_REMATCH[3]}"
-        if ((release > latest_release)); then
-            latest_release="${release}"
-        fi
+if [[ -n "${requested_archive_name}" ]]; then
+    archive="${build_dir}/${requested_archive_name}"
+    if [[ "${archive}" != "${build_dir}/"*'.zip' ]]; then
+        printf 'Invalid archive name: %s\n' "${requested_archive_name}" >&2
+        exit 1
     fi
-done
-shopt -u nullglob
+    release="${source_release}"
+else
+    latest_release=$((source_release - 1))
+    shopt -s nullglob
+    for existing_archive in "${build_dir}/skamasle-ols-plesk-${version}-"*.zip; do
+        filename="${existing_archive##*/}"
+        if [[ "${filename}" =~ ^skamasle-ols-plesk-([0-9]+(\.[0-9]+){1,2})-([0-9]+)\.zip$ ]] \
+            && [[ "${BASH_REMATCH[1]}" == "${version}" ]]; then
+            release="${BASH_REMATCH[3]}"
+            if ((release > latest_release)); then
+                latest_release="${release}"
+            fi
+        fi
+    done
+    shopt -u nullglob
 
-release=$((latest_release + 1))
-archive="${build_dir}/skamasle-ols-plesk-${version}-${release}.zip"
+    release=$((latest_release + 1))
+    archive="${build_dir}/skamasle-ols-plesk-${version}-${release}.zip"
+fi
 
 if [[ -e "${archive}" ]]; then
     printf 'Refusing to overwrite existing build: %s\n' "${archive}" >&2
@@ -56,9 +66,11 @@ if [[ -f "${root_dir}/logo.png" ]]; then
     cp -a "${root_dir}/logo.png" "${staging_dir}/logo.png"
 fi
 
-sed -i \
-    "s#<release>${source_release}</release>#<release>${release}</release>#" \
-    "${staging_dir}/meta.xml"
+if [[ -z "${requested_archive_name}" ]]; then
+    sed -i \
+        "s#<release>${source_release}</release>#<release>${release}</release>#" \
+        "${staging_dir}/meta.xml"
+fi
 
 xmllint --noout "${staging_dir}/meta.xml"
 

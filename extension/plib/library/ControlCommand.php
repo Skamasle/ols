@@ -72,6 +72,7 @@ class Modules_SkamasleOls_ControlCommand
             'template-status',
             'set-listener-port',
             'set-domain-cache',
+            'set-domain-lsapi',
             'prepare-domain-vhost',
             'reset-domain-vhost',
             'set-domain-routing',
@@ -132,6 +133,7 @@ class Modules_SkamasleOls_ControlCommand
                     'install-engine' => true,
                     'set-listener-port' => true,
                     'set-domain-cache' => true,
+                    'set-domain-lsapi' => true,
                     'prepare-domain-vhost' => true,
                     'reset-domain-vhost' => true,
                     'set-domain-routing' => true,
@@ -282,6 +284,23 @@ class Modules_SkamasleOls_ControlCommand
                 'cache' => $cacheResult,
             );
             $receipt['identity'] = $identityResult;
+            $exampleIdentityResult = $this->configManager->syncExampleVhostIdentity('apache', 'apache');
+            if (empty($exampleIdentityResult['configured'])) {
+                $receipt['exampleIdentity'] = $exampleIdentityResult;
+                $this->planStore->write($receipt);
+
+                return $this->error(
+                    2,
+                    isset($exampleIdentityResult['error'])
+                        ? $exampleIdentityResult['error']
+                        : 'Unable to update the OLS Example/html ownership.',
+                    array(
+                        'planFile' => $this->planStore->getPath(),
+                        'engine' => $receipt,
+                    )
+                );
+            }
+            $receipt['exampleIdentity'] = $exampleIdentityResult;
             $listenerSslResult = $this->configManager->syncListenerSslCertificate();
             if (empty($listenerSslResult['configured'])) {
                 $receipt['listenerSsl'] = $listenerSslResult;
@@ -504,6 +523,7 @@ class Modules_SkamasleOls_ControlCommand
         if ('set-domain-cache' === $command) {
             $guid = $this->normalizeGuidArgument($arguments[0]);
             $enabled = $this->parseBooleanArgument($arguments[1]);
+            $domainName = isset($arguments[2]) ? trim((string) $arguments[2]) : '';
             if (null === $guid || null === $enabled) {
                 return $this->error(
                     64,
@@ -511,16 +531,79 @@ class Modules_SkamasleOls_ControlCommand
                 );
             }
 
+            $previousGeneration = $state['generation'];
             $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
-            if (null === $domainIndex) {
+            $liveDomain = $this->findDomainByGuid(
+                $guid,
+                '' !== $domainName ? $domainName : null
+            );
+            if (null === $liveDomain) {
+                if (null === $domainIndex) {
+                    return $this->error(
+                        2,
+                        'Domain no longer exists in Plesk.'
+                    );
+                }
+                $staleDomain = $state['domains'][$domainIndex];
+                $remainingDomains = array();
+                foreach ($state['domains'] as $index => $item) {
+                    if ($index === $domainIndex || 'ols' !== $item['appliedRouting']) {
+                        continue;
+                    }
+                    $remainingDomains[] = $item;
+                }
+
+                try {
+                    $cleanupResult = $this->configManager->clearDomainArtifacts(
+                        $staleDomain,
+                        $state['server']['listener'],
+                        $remainingDomains
+                    );
+                    $state['generation'] = $previousGeneration + 1;
+                    $state['domains'] = array_values(array_diff_key(
+                        $state['domains'],
+                        array($domainIndex => true)
+                    ));
+                    $this->stateStore->write($state, $previousGeneration);
+                } catch (Throwable $exception) {
+                    return $this->error(2, $exception->getMessage(), array(
+                        'domain' => $staleDomain,
+                    ));
+                }
+
+                $logPath = $this->configManager->logEvent(
+                    'set-domain-cache.stale-domain-cleared',
+                    array(
+                        'guid' => $guid,
+                        'domain' => $staleDomain['name'],
+                        'cleanup' => $cleanupResult,
+                    )
+                );
                 return $this->error(
                     2,
-                    'Domain vhost must be prepared before LSCache can be changed.'
+                    'Domain no longer exists in Plesk. Stale OLS state was cleared.',
+                    array(
+                        'domain' => $staleDomain,
+                        'cleanup' => $cleanupResult,
+                        'logPath' => $logPath,
+                    )
                 );
             }
 
-            $previousGeneration = $state['generation'];
-            $previousDomain = $state['domains'][$domainIndex];
+            if (null === $domainIndex) {
+                $recoveredDomain = $this->buildDomainData($liveDomain, $state);
+                $state['domains'] = $this->upsertDomain($state['domains'], $recoveredDomain);
+                $state['generation'] = $previousGeneration + 1;
+                $this->stateStore->write($state, $previousGeneration);
+                $previousGeneration = $state['generation'];
+                $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
+            }
+
+            $previousDomain = $this->buildDomainData(
+                $liveDomain,
+                $state,
+                $state['domains'][$domainIndex]['guid']
+            );
             $previousEnabled = !empty($previousDomain['cacheEnabled']);
             $updatedDomain = $previousDomain;
             $updatedDomain['cacheEnabled'] = $enabled;
@@ -573,7 +656,7 @@ class Modules_SkamasleOls_ControlCommand
                 }
 
                 $state['generation'] = $previousGeneration + 1;
-                $state['domains'][$domainIndex]['cacheEnabled'] = $enabled;
+                $state['domains'][$domainIndex] = $updatedDomain;
                 $this->stateStore->write($state, $previousGeneration);
             } catch (Throwable $exception) {
                 try {
@@ -626,6 +709,185 @@ class Modules_SkamasleOls_ControlCommand
                 'generation' => $state['generation'],
                 'domain' => $state['domains'][$domainIndex],
                 'cacheEnabled' => $enabled,
+                'vhostConfig' => $vhostResult,
+                'logPath' => $logPath,
+            ));
+        }
+
+        if ('set-domain-lsapi' === $command) {
+            $guid = $this->normalizeGuidArgument($arguments[0]);
+            $domainName = isset($arguments[2]) ? trim((string) $arguments[2]) : '';
+            $domainPayload = null;
+            try {
+                $lsapi = $this->normalizeLsapiSettings(
+                    json_decode((string) $arguments[1], true)
+                );
+                if (isset($arguments[3])) {
+                    $decodedPayload = json_decode((string) $arguments[3], true);
+                    if (!is_array($decodedPayload)) {
+                        throw new InvalidArgumentException(
+                            'Invalid LSAPI domain payload.'
+                        );
+                    }
+                    $domainPayload = $this->domainFromPayload($decodedPayload);
+                    if (0 !== strcasecmp($domainPayload['guid'], $guid)) {
+                        throw new InvalidArgumentException(
+                            'LSAPI domain payload GUID does not match the request.'
+                        );
+                    }
+                    if ('' !== $domainName
+                        && 0 !== strcasecmp($domainPayload['name'], $domainName)
+                    ) {
+                        throw new InvalidArgumentException(
+                            'LSAPI domain payload name does not match the request.'
+                        );
+                    }
+                    $domainPayload = $this->mergePayloadWithState(
+                        $domainPayload,
+                        $state
+                    );
+                }
+            } catch (Throwable $exception) {
+                return $this->error(64, $exception->getMessage());
+            }
+
+            $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
+            $previousGeneration = $state['generation'];
+            if (null !== $domainPayload) {
+                $previousDomain = $domainPayload;
+            } else {
+                $liveDomain = $this->findDomainByGuid(
+                    $guid,
+                    '' !== $domainName ? $domainName : null
+                );
+                if (null === $liveDomain) {
+                    return $this->error(
+                        2,
+                        'Domain lookup is unavailable. Reopen the extension page and retry.'
+                    );
+                }
+                $previousDomain = $this->buildDomainData(
+                    $liveDomain,
+                    $state,
+                    null === $domainIndex
+                        ? null
+                        : $state['domains'][$domainIndex]['guid']
+                );
+            }
+            $updatedDomain = $previousDomain;
+            $updatedDomain['php']['lsapi'] = $lsapi;
+            $logPath = $this->configManager->logEvent(
+                'set-domain-lsapi.begin',
+                array(
+                    'guid' => $guid,
+                    'domain' => $previousDomain['name'],
+                    'requested' => $lsapi,
+                )
+            );
+            $operationContext = array();
+
+            try {
+                $vhostResult = $this->configManager->writeVhostConfig($updatedDomain);
+                $operationContext['vhostConfig'] = $vhostResult;
+                if (empty($vhostResult['available'])) {
+                    throw new RuntimeException(
+                        isset($vhostResult['error'])
+                            ? $vhostResult['error']
+                            : 'Unable to update the vhost LSAPI configuration.'
+                    );
+                }
+
+                $configCheck = $this->serviceManager->testConfig();
+                $operationContext['configCheck'] = $configCheck;
+                if (empty($configCheck['valid'])) {
+                    throw new RuntimeException('OLS configuration test failed.');
+                }
+
+                $reload = $this->serviceManager->reload('lsws');
+                $operationContext['reload'] = $reload;
+                if (empty($reload['reloaded']) && empty($reload['restarted'])) {
+                    throw new RuntimeException(
+                        isset($reload['error'])
+                            ? $reload['error']
+                            : 'Unable to reload lsws.'
+                    );
+                }
+
+                $state['generation'] = $previousGeneration + 1;
+                $state['domains'] = $this->upsertDomain(
+                    $state['domains'],
+                    $updatedDomain
+                );
+                $domainIndex = $this->findStateDomainIndex(
+                    $state['domains'],
+                    $updatedDomain['guid']
+                );
+                try {
+                    $this->stateStore->write($state, $previousGeneration);
+                } catch (Throwable $stateException) {
+                    if (false === strpos(
+                        $stateException->getMessage(),
+                        'Desired state generation conflict.'
+                    )) {
+                        throw $stateException;
+                    }
+
+                    $latestState = $this->stateStore->read();
+                    $latestGeneration = $latestState['generation'];
+                    $latestState['domains'] = $this->upsertDomain(
+                        $latestState['domains'],
+                        $updatedDomain
+                    );
+                    $latestState['generation'] = $latestGeneration + 1;
+                    $this->stateStore->write($latestState, $latestGeneration);
+                    $state = $latestState;
+                    $previousGeneration = $latestGeneration;
+                    $domainIndex = $this->findStateDomainIndex(
+                        $state['domains'],
+                        $updatedDomain['guid']
+                    );
+                }
+            } catch (Throwable $exception) {
+                try {
+                    $this->configManager->writeVhostConfig($previousDomain);
+                    $this->serviceManager->reload('lsws');
+                } catch (Throwable $rollbackException) {
+                    return $this->error(2, $exception->getMessage(), array(
+                        'rollbackError' => $rollbackException->getMessage(),
+                        'logPath' => $logPath,
+                    ));
+                }
+
+                $this->configManager->logEvent(
+                    'set-domain-lsapi.failed',
+                    array(
+                        'guid' => $guid,
+                        'domain' => $previousDomain['name'],
+                        'error' => $exception->getMessage(),
+                        'operation' => $operationContext,
+                    )
+                );
+                return $this->error(2, $exception->getMessage(), array(
+                    'domain' => $previousDomain,
+                    'lsapi' => $lsapi,
+                    'logPath' => $logPath,
+                ));
+            }
+
+            $this->configManager->logEvent(
+                'set-domain-lsapi.done',
+                array(
+                    'guid' => $guid,
+                    'domain' => $previousDomain['name'],
+                    'lsapi' => $lsapi,
+                    'generation' => $state['generation'],
+                )
+            );
+            return $this->success(array(
+                'schemaVersion' => $state['schemaVersion'],
+                'generation' => $state['generation'],
+                'domain' => $state['domains'][$domainIndex],
+                'lsapi' => $lsapi,
                 'vhostConfig' => $vhostResult,
                 'logPath' => $logPath,
             ));
@@ -974,7 +1236,7 @@ class Modules_SkamasleOls_ControlCommand
                         'guid' => $domainData['guid'],
                         'vhostPath' => $this->configManager->getVhostPath($domainData['name']),
                         'configPath' => $this->configManager->getVhostConfigPath(
-                            $domainData['guid']
+                            $domainData['name']
                         ),
                         'logPath' => $logPath,
                     )
@@ -1000,7 +1262,7 @@ class Modules_SkamasleOls_ControlCommand
                     'guid' => $domainData['guid'],
                     'path' => $this->configManager->getVhostPath($domainData['name']),
                     'configPath' => $this->configManager->getVhostConfigPath(
-                        $domainData['guid']
+                        $domainData['name']
                     ),
                     'staged' => true,
                     'configCheck' => $configCheck,
@@ -1037,6 +1299,12 @@ class Modules_SkamasleOls_ControlCommand
             $state['generation'] = $previousGeneration + 1;
             $state['domains'][$domainIndex]['requestedRouting'] = 'native';
             $state['domains'][$domainIndex]['appliedRouting'] = 'native';
+            $state['domains'][$domainIndex]['cacheEnabled'] = false;
+            if (isset($state['domains'][$domainIndex]['php'])
+                && is_array($state['domains'][$domainIndex]['php'])
+            ) {
+                unset($state['domains'][$domainIndex]['php']['lsapi']);
+            }
 
             try {
                 $this->stateStore->write($state, $previousGeneration);
@@ -1268,13 +1536,14 @@ class Modules_SkamasleOls_ControlCommand
         return $port;
     }
 
-    private function findDomainByGuid($guid)
+    private function findDomainByGuid($guid, $domainName = null)
     {
         if (!class_exists('pm_Domain')) {
             return null;
         }
 
         $guid = $this->normalizeGuidArgument($guid);
+        $domainName = strtolower(trim((string) $domainName));
         if (null === $guid) {
             return null;
         }
@@ -1287,6 +1556,19 @@ class Modules_SkamasleOls_ControlCommand
             $domainGuid = $this->normalizeGuidArgument($domain->getGuid());
             if (null !== $domainGuid && 0 === strcasecmp($domainGuid, $guid)) {
                 return $domain;
+            }
+
+            if ('' !== $domainName) {
+                $candidateNames = array();
+                if (method_exists($domain, 'getName')) {
+                    $candidateNames[] = strtolower(trim((string) $domain->getName()));
+                }
+                if (method_exists($domain, 'getDisplayName')) {
+                    $candidateNames[] = strtolower(trim((string) $domain->getDisplayName()));
+                }
+                if (in_array($domainName, $candidateNames, true)) {
+                    return $domain;
+                }
             }
         }
 
@@ -1394,9 +1676,20 @@ class Modules_SkamasleOls_ControlCommand
                 'version' => $phpVersion,
                 'lsphpBinary' => '/opt/plesk/php/' . $phpVersion . '/bin/lsphp',
                 'socket' => $this->configManager->getSocketPath($guid),
+                'lsapi' => $this->normalizeLsapiSettings(
+                    isset($payload['lsapi']) && is_array($payload['lsapi'])
+                        ? $payload['lsapi']
+                        : array()
+                ),
             ),
-            'requestedRouting' => 'native',
-            'appliedRouting' => 'native',
+            'requestedRouting' => isset($payload['requestedRouting'])
+                && in_array($payload['requestedRouting'], array('native', 'ols'), true)
+                    ? $payload['requestedRouting']
+                    : 'native',
+            'appliedRouting' => isset($payload['requestedRouting'])
+                && in_array($payload['requestedRouting'], array('native', 'ols'), true)
+                    ? $payload['requestedRouting']
+                    : 'native',
             'cacheEnabled' => isset($payload['cacheEnabled'])
                 ? (bool) $payload['cacheEnabled']
                 : false,
@@ -1417,11 +1710,16 @@ class Modules_SkamasleOls_ControlCommand
             if (array_key_exists('cacheEnabled', $existing)) {
                 $domain['cacheEnabled'] = (bool) $existing['cacheEnabled'];
             }
+            if (isset($existing['php']['lsapi'])
+                && (!isset($domain['php']['lsapi']) || empty($domain['php']['lsapi']))
+            ) {
+                $domain['php']['lsapi'] = $existing['php']['lsapi'];
+            }
         }
         return $domain;
     }
 
-    private function buildDomainData($domain, array $state)
+    private function buildDomainData($domain, array $state, $stateGuid = null)
     {
         $documentRoot = null;
         if (method_exists($domain, 'hasHosting') && $domain->hasHosting()) {
@@ -1435,7 +1733,14 @@ class Modules_SkamasleOls_ControlCommand
         if (null === $guid) {
             throw new RuntimeException('Plesk returned an invalid domain GUID.');
         }
-        $existing = $this->findStateDomain($state['domains'], $guid);
+        $stateGuid = $this->normalizeGuidArgument($stateGuid);
+        $existing = $this->findStateDomain(
+            $state['domains'],
+            null !== $stateGuid ? $stateGuid : $guid
+        );
+        if (null !== $stateGuid) {
+            $guid = $stateGuid;
+        }
         $name = method_exists($domain, 'getName')
             ? (string) $domain->getName()
             : (string) $domain->getDisplayName();
@@ -1474,6 +1779,9 @@ class Modules_SkamasleOls_ControlCommand
                 'version' => $phpVersion,
                 'lsphpBinary' => '/opt/plesk/php/' . $phpVersion . '/bin/lsphp',
                 'socket' => $this->configManager->getSocketPath($guid),
+                'lsapi' => $existing && isset($existing['php']['lsapi'])
+                    ? $existing['php']['lsapi']
+                    : $this->normalizeLsapiSettings(array()),
             ),
             'cacheEnabled' => $existing && array_key_exists('cacheEnabled', $existing)
                 ? (bool) $existing['cacheEnabled']
@@ -1917,9 +2225,41 @@ class Modules_SkamasleOls_ControlCommand
                 && preg_match('/^\d+$/', (string) $arguments[0]);
         }
         if ('set-domain-cache' === $command) {
-            return 2 === count($arguments)
-                && null !== $this->normalizeGuidArgument($arguments[0])
-                && null !== $this->parseBooleanArgument($arguments[1]);
+            if (count($arguments) < 2 || count($arguments) > 3) {
+                return false;
+            }
+            if (null === $this->normalizeGuidArgument($arguments[0])) {
+                return false;
+            }
+            if (null === $this->parseBooleanArgument($arguments[1])) {
+                return false;
+            }
+            if (2 === count($arguments)) {
+                return true;
+            }
+            return '' !== trim((string) $arguments[2]);
+        }
+        if ('set-domain-lsapi' === $command) {
+            if (count($arguments) < 2 || count($arguments) > 4) {
+                return false;
+            }
+            if (null === $this->normalizeGuidArgument($arguments[0])) {
+                return false;
+            }
+            $payload = json_decode((string) $arguments[1], true);
+            if (!is_array($payload)) {
+                return false;
+            }
+            if (2 === count($arguments)) {
+                return true;
+            }
+            if ('' === trim((string) $arguments[2])) {
+                return false;
+            }
+            if (4 === count($arguments)) {
+                return is_array(json_decode((string) $arguments[3], true));
+            }
+            return true;
         }
         if ('prepare-domain-vhost' === $command) {
             if (count($arguments) < 1 || count($arguments) > 2) {
@@ -1964,6 +2304,55 @@ class Modules_SkamasleOls_ControlCommand
             . '[a-fA-F0-9]{12}$/',
             $guid
         );
+    }
+
+    private function normalizeLsapiSettings($settings)
+    {
+        if (!is_array($settings)) {
+            throw new InvalidArgumentException('LSAPI settings must be an object.');
+        }
+        $defaults = array(
+            'maxConnections' => 10,
+            'children' => 10,
+            'instances' => 1,
+            'backlog' => 100,
+            'initTimeout' => 60,
+            'retryTimeout' => 0,
+            'persistentConnection' => true,
+            'responseBuffering' => false,
+        );
+        $allowed = array_keys($defaults);
+        if (!empty(array_diff(array_keys($settings), $allowed))) {
+            throw new InvalidArgumentException('LSAPI settings contain unknown properties.');
+        }
+        $normalized = array_merge($defaults, $settings);
+        $limits = array(
+            'maxConnections' => array(1, 1000),
+            'children' => array(1, 1000),
+            'instances' => array(1, 100),
+            'backlog' => array(1, 10000),
+            'initTimeout' => array(1, 3600),
+            'retryTimeout' => array(0, 3600),
+        );
+        foreach ($limits as $key => $range) {
+            if (!is_int($normalized[$key])
+                || $normalized[$key] < $range[0]
+                || $normalized[$key] > $range[1]
+            ) {
+                throw new InvalidArgumentException(
+                    'LSAPI setting ' . $key . ' is outside the allowed range.'
+                );
+            }
+        }
+        foreach (array('persistentConnection', 'responseBuffering') as $key) {
+            if (!is_bool($normalized[$key])) {
+                throw new InvalidArgumentException(
+                    'LSAPI setting ' . $key . ' must be boolean.'
+                );
+            }
+        }
+
+        return $normalized;
     }
 
     private function success(array $payload)

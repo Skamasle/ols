@@ -2,6 +2,8 @@
 
 [English version](README.md)
 
+Licencia: GNU General Public License v3.0. Consulta [LICENSE](LICENSE).
+
 ## Advertencia
 
 No instales este módulo en producción.
@@ -26,7 +28,7 @@ El proyecto está dividido ahora en dos sistemas que cooperan pero son
 independientes:
 
 - la extensión de Plesk en `extension/`;
-- un agente opcional futuro para reconciliación de `.htaccess` y eventos de
+- un agente opcional independiente para reconciliación de `.htaccess` y eventos de
   Plesk.
 
 El agente todavía no se empaqueta en el ZIP del módulo. Ambos pueden trabajar
@@ -40,6 +42,16 @@ El objetivo no es engañar a Plesk para que crea que Apache sigue funcionando.
 Apache continúa instalado, arrancado y disponible para los dominios que lo
 usan. OpenLiteSpeed se añade como un tercer camino de ejecución para aquellos
 dominios donde tenga sentido aprovechar LSPHP/LSAPI.
+
+La configuración de cada vhost OLS se guarda en la ruta estándar
+`/usr/local/lsws/conf/vhosts/<dominio>/vhconf.conf`. Esto permite verla y
+editarla desde WebAdmin. Los cambios manuales están permitidos, pero la
+extensión de Plesk sigue siendo la fuente autoritativa: al reconstruir el
+vhost se regenera el archivo y se sobrescriben los cambios hechos en WebAdmin.
+
+Desde la tabla de dominios de la extensión también se pueden ajustar por
+dominio las conexiones máximas LSAPI, procesos `PHP_LSAPI_CHILDREN`,
+instancias, backlog, timeouts, conexión persistente y buffer de respuesta.
 
 ## La idea
 

@@ -3,8 +3,13 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-archive="$(find "${root_dir}/build" -maxdepth 1 -type f \
-    -name 'skamasle-ols-plesk-*.zip' -printf '%f\n' | sort -V | tail -n 1)"
+requested_archive_name="${SKAMASLE_OLS_ARCHIVE_NAME:-}"
+if [[ -n "${requested_archive_name}" ]]; then
+    archive="${requested_archive_name}"
+else
+    archive="$(find "${root_dir}/build" -maxdepth 1 -type f \
+        -name 'skamasle-ols-plesk-*.zip' -printf '%f\n' | sort -V | tail -n 1)"
+fi
 
 if [[ -z "${archive}" ]]; then
     printf 'No extension archive found\n' >&2
