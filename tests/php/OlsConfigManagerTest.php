@@ -114,7 +114,7 @@ try {
                 'maxConnections' => 24,
                 'children' => 20,
                 'instances' => 2,
-                'backlog' => 250,
+                'backlog' => 100,
                 'initTimeout' => 90,
                 'retryTimeout' => 5,
                 'persistentConnection' => false,
@@ -274,7 +274,7 @@ try {
     assertSameValue(true, false !== strpos($vhconfContent, 'env LSAPI_AVOID_FORK=100M'), 'LSAPI avoid fork must be configured');
     assertSameValue(true, false !== strpos($vhconfContent, 'env LSAPI_ACCEPT_NOTIFY=1'), 'LSAPI accept notify must be configured');
     assertSameValue(true, false !== strpos($vhconfContent, 'instances 2'), 'LSAPI instances must be configurable');
-    assertSameValue(true, false !== strpos($vhconfContent, 'backlog 250'), 'LSAPI backlog must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'backlog 100'), 'LSAPI backlog must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'initTimeout 90'), 'LSAPI init timeout must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'retryTimeout 5'), 'LSAPI retry timeout must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'persistConn 0'), 'LSAPI persistent connections must be configurable');

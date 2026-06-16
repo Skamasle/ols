@@ -1012,7 +1012,7 @@ class Modules_SkamasleOls_OlsConfigManager
                 : 1,
             'backlog' => isset($settings['backlog'])
                 ? (int) $settings['backlog']
-                : 300,
+                : 100,
             'initTimeout' => isset($settings['initTimeout'])
                 ? (int) $settings['initTimeout']
                 : 60,

@@ -724,7 +724,7 @@ try {
     $lsapiSettings = array(
         'maxConnections' => 32,
         'instances' => 2,
-        'backlog' => 300,
+        'backlog' => 100,
         'initTimeout' => 75,
         'retryTimeout' => 3,
         'persistentConnection' => false,
@@ -734,7 +734,7 @@ try {
         'maxConnections' => 32,
         'children' => 32,
         'instances' => 2,
-        'backlog' => 300,
+        'backlog' => 100,
         'initTimeout' => 75,
         'retryTimeout' => 3,
         'persistentConnection' => false,

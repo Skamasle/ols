@@ -1160,7 +1160,7 @@ class IndexController extends pm_Controller_Action
             'maxConnections' => 8,
             'children' => 8,
             'instances' => 1,
-            'backlog' => 300,
+            'backlog' => 100,
             'initTimeout' => 60,
             'retryTimeout' => 0,
             'persistentConnection' => true,
