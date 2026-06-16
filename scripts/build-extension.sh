@@ -81,4 +81,9 @@ xmllint --noout "${staging_dir}/meta.xml"
         -x '*~'
 )
 
+if [[ -z "${requested_archive_name}" ]]; then
+    latest_archive="${build_dir}/skamasle-ols-plesk-latest.zip"
+    cp -f "${archive}" "${latest_archive}"
+fi
+
 printf 'Created %s\n' "${archive}"

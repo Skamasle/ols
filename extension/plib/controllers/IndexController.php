@@ -472,11 +472,19 @@ class IndexController extends pm_Controller_Action
         }
 
         $client = new Modules_SkamasleOls_EngineInstaller();
+        $domainPayload = $this->buildDomainPayload($domain);
+        $domainPayloadJson = json_encode($domainPayload, JSON_UNESCAPED_SLASHES);
+        if (false === $domainPayloadJson) {
+            $this->populateIndexView('Unable to encode domain data.', 'error');
+            $this->_helper->viewRenderer->setScriptAction('index');
+            return;
+        }
         $result = $client->run(array(
             'set-domain-cache',
             trim((string) $domain->getGuid(), '{}'),
             $enabled ? '1' : '0',
             $domain->getName(),
+            $domainPayloadJson,
         ));
         if (empty($result['available'])) {
             try {
@@ -1116,7 +1124,6 @@ class IndexController extends pm_Controller_Action
     {
         $fields = array(
             'maxConnections' => array('lsapi_max_connections', 1, 1000),
-            'children' => array('lsapi_children', 1, 1000),
             'instances' => array('lsapi_instances', 1, 100),
             'backlog' => array('lsapi_backlog', 1, 10000),
             'initTimeout' => array('lsapi_init_timeout', 1, 3600),
@@ -1138,6 +1145,7 @@ class IndexController extends pm_Controller_Action
             }
             $settings[$key] = $value;
         }
+        $settings['children'] = $settings['maxConnections'];
         $settings['persistentConnection'] = '1' === (string) $this->getRequest()
             ->getPost('lsapi_persistent_connection', '0');
         $settings['responseBuffering'] = '1' === (string) $this->getRequest()
@@ -1149,10 +1157,10 @@ class IndexController extends pm_Controller_Action
     private function domainLsapiSettings($domain)
     {
         $defaults = array(
-            'maxConnections' => 10,
-            'children' => 10,
+            'maxConnections' => 8,
+            'children' => 8,
             'instances' => 1,
-            'backlog' => 100,
+            'backlog' => 300,
             'initTimeout' => 60,
             'retryTimeout' => 0,
             'persistentConnection' => true,

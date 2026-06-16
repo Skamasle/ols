@@ -723,7 +723,16 @@ try {
     );
     $lsapiSettings = array(
         'maxConnections' => 32,
-        'children' => 24,
+        'instances' => 2,
+        'backlog' => 300,
+        'initTimeout' => 75,
+        'retryTimeout' => 3,
+        'persistentConnection' => false,
+        'responseBuffering' => true,
+    );
+    $expectedLsapiSettings = array(
+        'maxConnections' => 32,
+        'children' => 32,
         'instances' => 2,
         'backlog' => 300,
         'initTimeout' => 75,
@@ -738,18 +747,18 @@ try {
     ));
     assertSameValue(0, $lsapi['exitCode'], 'LSAPI update must succeed');
     assertSameValue(
-        $lsapiSettings,
+        $expectedLsapiSettings,
         $lsapi['payload']['lsapi'],
         'LSAPI update must return normalized settings'
     );
     assertSameValue(
-        $lsapiSettings,
+        $expectedLsapiSettings,
         $configManager->lsapiWrites[count($configManager->lsapiWrites) - 1],
         'LSAPI update must rewrite the vhost config'
     );
     $stateAfterLsapi = json_decode((string) file_get_contents($stateFile), true);
     assertSameValue(
-        $lsapiSettings,
+        $expectedLsapiSettings,
         $stateAfterLsapi['domains'][0]['php']['lsapi'],
         'LSAPI update must persist settings in desired state'
     );
@@ -856,26 +865,58 @@ try {
     );
 
     pm_Domain::$available = false;
+    $clearCallsBeforeStaleLookup = count($configManager->clearCalls);
     $staleCache = $command->run(array(
         'set-domain-cache',
         '{123e4567-e89b-42d3-a456-426614174000}',
         '0',
     ));
     assertSameValue(
-        2,
+        0,
         $staleCache['exitCode'],
-        'A missing Plesk domain must fail closed'
+        'A missing Plesk domain with local state must still be handled'
     );
     assertSameValue(
-        true,
-        !empty($configManager->clearCalls),
-        'A missing Plesk domain must clear stale artifacts'
+        $clearCallsBeforeStaleLookup,
+        count($configManager->clearCalls),
+        'A missing Plesk domain with local state must not clear artifacts'
     );
     $stateAfterCleanup = json_decode((string) file_get_contents($stateFile), true);
     assertSameValue(
-        0,
+        1,
         count($stateAfterCleanup['domains']),
-        'Missing domains must be removed from desired state'
+        'Existing desired state must be preserved when Plesk lookup is unavailable'
+    );
+    $cacheDomainPayload = array(
+        'guid' => '123e4567-e89b-42d3-a456-426614174000',
+        'pleskId' => 10,
+        'name' => 'example.test',
+        'documentRoot' => '/var/www/vhosts/example.test/httpdocs',
+        'vhostRoot' => '/var/www/vhosts/example.test',
+        'systemUser' => 'example',
+        'systemGroup' => 'psacln',
+        'phpHandlerId' => 'plesk-php84-fpm',
+        'phpVersion' => '8.4',
+        'cacheEnabled' => false,
+        'requestedRouting' => 'ols',
+    );
+    $clearCallsBeforePayloadCache = count($configManager->clearCalls);
+    $payloadCache = $command->run(array(
+        'set-domain-cache',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        '1',
+        'example.test',
+        json_encode($cacheDomainPayload),
+    ));
+    assertSameValue(
+        0,
+        $payloadCache['exitCode'],
+        'LSCache toggle must use the controller payload when Plesk lookup is unavailable'
+    );
+    assertSameValue(
+        $clearCallsBeforePayloadCache,
+        count($configManager->clearCalls),
+        'LSCache payload toggle must not clear artifacts for an existing domain'
     );
     pm_Domain::$available = true;
 

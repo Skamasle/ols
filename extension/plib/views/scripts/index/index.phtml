@@ -670,18 +670,14 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                         <details class="skamasle-ols-details">
                                             <summary>
                                                 <?php echo $escape(
-                                                    $lsapi['children'] . ' workers / '
-                                                    . $lsapi['maxConnections'] . ' connections'
+                                                    $lsapi['maxConnections'] . ' maxConns'
                                                 ); ?>
                                             </summary>
                                             <form method="post" action="<?php echo $escape($this->setDomainLsapiUrl); ?>" class="skamasle-ols-field" style="margin-top:10px;">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
                                                 <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
-                                                <label>Max connections
+                                                <label>Max connections / workers
                                                     <input class="skamasle-ols-input" type="number" name="lsapi_max_connections" min="1" max="1000" value="<?php echo $escape($lsapi['maxConnections']); ?>" required="required">
-                                                </label>
-                                                <label>PHP workers
-                                                    <input class="skamasle-ols-input" type="number" name="lsapi_children" min="1" max="1000" value="<?php echo $escape($lsapi['children']); ?>" required="required">
                                                 </label>
                                                 <label>Instances
                                                     <input class="skamasle-ols-input" type="number" name="lsapi_instances" min="1" max="100" value="<?php echo $escape($lsapi['instances']); ?>" required="required">

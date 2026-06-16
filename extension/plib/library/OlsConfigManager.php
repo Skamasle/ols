@@ -952,8 +952,8 @@ class Modules_SkamasleOls_OlsConfigManager
                 $hosts,
                 array($name)
             ))),
-            'enableGzip 1',
-            'enableBr 1',
+            'enableGzip 0',
+            'enableBr 0',
             '',
             'index {',
             '  useServer 0',
@@ -964,7 +964,10 @@ class Modules_SkamasleOls_OlsConfigManager
             '    type lsapi',
             '    address ' . $socketAddress,
             '    maxConns ' . $lsapi['maxConnections'],
-            '    env PHP_LSAPI_CHILDREN=' . $lsapi['children'],
+            '    env PHP_LSAPI_CHILDREN=' . $lsapi['maxConnections'],
+            '    env PHP_LSAPI_MAX_REQUESTS=1000',
+            '    env LSAPI_AVOID_FORK=100M',
+            '    env LSAPI_ACCEPT_NOTIFY=1',
             '    env PHPRC=' . $phpIniDir,
             '    env LSPHP_ENABLE_USER_INI=on',
             '    env HTTPS=on',
@@ -997,19 +1000,19 @@ class Modules_SkamasleOls_OlsConfigManager
 
     private function normalizeLsapiSettings(array $settings)
     {
-        return array(
+        $lsapi = array(
             'maxConnections' => isset($settings['maxConnections'])
                 ? (int) $settings['maxConnections']
-                : 10,
+                : 8,
             'children' => isset($settings['children'])
                 ? (int) $settings['children']
-                : 10,
+                : 8,
             'instances' => isset($settings['instances'])
                 ? (int) $settings['instances']
                 : 1,
             'backlog' => isset($settings['backlog'])
                 ? (int) $settings['backlog']
-                : 100,
+                : 300,
             'initTimeout' => isset($settings['initTimeout'])
                 ? (int) $settings['initTimeout']
                 : 60,
@@ -1020,6 +1023,8 @@ class Modules_SkamasleOls_OlsConfigManager
                 || !empty($settings['persistentConnection']),
             'responseBuffering' => !empty($settings['responseBuffering']),
         );
+        $lsapi['children'] = $lsapi['maxConnections'];
+        return $lsapi;
     }
 
     private function serverCacheModuleBlock()

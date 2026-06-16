@@ -189,10 +189,10 @@ class Modules_SkamasleOls_DomainInventory
     private function readLsapiSettings($domain)
     {
         $defaults = array(
-            'maxConnections' => 10,
-            'children' => 10,
+            'maxConnections' => 8,
+            'children' => 8,
             'instances' => 1,
-            'backlog' => 100,
+            'backlog' => 300,
             'initTimeout' => 60,
             'retryTimeout' => 0,
             'persistentConnection' => true,
@@ -209,7 +209,9 @@ class Modules_SkamasleOls_DomainInventory
             return $defaults;
         }
 
-        return array_merge($defaults, array_intersect_key($decoded, $defaults));
+        $settings = array_merge($defaults, array_intersect_key($decoded, $defaults));
+        $settings['children'] = $settings['maxConnections'];
+        return $settings;
     }
 
     private function notScannedHtaccessResult()

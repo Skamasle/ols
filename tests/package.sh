@@ -8,7 +8,7 @@ if [[ -n "${requested_archive_name}" ]]; then
     archive="${requested_archive_name}"
 else
     archive="$(find "${root_dir}/build" -maxdepth 1 -type f \
-        -name 'skamasle-ols-plesk-*.zip' -printf '%f\n' | sort -V | tail -n 1)"
+        -name 'skamasle-ols-plesk-[0-9]*.zip' -printf '%f\n' | sort -V | tail -n 1)"
 fi
 
 if [[ -z "${archive}" ]]; then

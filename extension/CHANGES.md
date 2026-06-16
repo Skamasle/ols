@@ -3,6 +3,16 @@
 Build releases are generated incrementally. The release number identifies the
 exact ZIP artifact and does not replace earlier builds.
 
+## 0.1.1-2
+
+- Make LSAPI use a single user-facing value and mirror it to both
+  `maxConns` and `PHP_LSAPI_CHILDREN`.
+- Update the injected LSAPI defaults to use `maxConns 8`,
+  `PHP_LSAPI_CHILDREN=8`, `PHP_LSAPI_MAX_REQUESTS=1000`,
+  `LSAPI_AVOID_FORK=100M`, `LSAPI_ACCEPT_NOTIFY=1`, and `backlog 300`.
+- Disable `enableGzip` and `enableBr` by default in managed vhosts.
+- Fix LSCache activation.
+
 ## 0.1.1-beta
 
 - Move managed domain files to the standard OLS layout under

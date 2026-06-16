@@ -524,6 +524,7 @@ class Modules_SkamasleOls_ControlCommand
             $guid = $this->normalizeGuidArgument($arguments[0]);
             $enabled = $this->parseBooleanArgument($arguments[1]);
             $domainName = isset($arguments[2]) ? trim((string) $arguments[2]) : '';
+            $domainPayload = null;
             if (null === $guid || null === $enabled) {
                 return $this->error(
                     64,
@@ -531,79 +532,80 @@ class Modules_SkamasleOls_ControlCommand
                 );
             }
 
+            if (isset($arguments[3])) {
+                try {
+                    $decodedPayload = json_decode((string) $arguments[3], true);
+                    if (!is_array($decodedPayload)) {
+                        throw new InvalidArgumentException(
+                            'Invalid LSCache domain payload.'
+                        );
+                    }
+                    $domainPayload = $this->domainFromPayload($decodedPayload);
+                    if (0 !== strcasecmp($domainPayload['guid'], $guid)) {
+                        throw new InvalidArgumentException(
+                            'LSCache domain payload GUID does not match the request.'
+                        );
+                    }
+                    if ('' !== $domainName
+                        && 0 !== strcasecmp($domainPayload['name'], $domainName)
+                    ) {
+                        throw new InvalidArgumentException(
+                            'LSCache domain payload name does not match the request.'
+                        );
+                    }
+                    $domainPayload = $this->mergePayloadWithState(
+                        $domainPayload,
+                        $state
+                    );
+                } catch (Throwable $exception) {
+                    return $this->error(64, $exception->getMessage());
+                }
+            }
+
             $previousGeneration = $state['generation'];
             $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
-            $liveDomain = $this->findDomainByGuid(
-                $guid,
-                '' !== $domainName ? $domainName : null
-            );
-            if (null === $liveDomain) {
+            if (null !== $domainPayload) {
                 if (null === $domainIndex) {
-                    return $this->error(
-                        2,
-                        'Domain no longer exists in Plesk.'
-                    );
-                }
-                $staleDomain = $state['domains'][$domainIndex];
-                $remainingDomains = array();
-                foreach ($state['domains'] as $index => $item) {
-                    if ($index === $domainIndex || 'ols' !== $item['appliedRouting']) {
-                        continue;
-                    }
-                    $remainingDomains[] = $item;
-                }
-
-                try {
-                    $cleanupResult = $this->configManager->clearDomainArtifacts(
-                        $staleDomain,
-                        $state['server']['listener'],
-                        $remainingDomains
+                    $state['domains'] = $this->upsertDomain(
+                        $state['domains'],
+                        $domainPayload
                     );
                     $state['generation'] = $previousGeneration + 1;
-                    $state['domains'] = array_values(array_diff_key(
-                        $state['domains'],
-                        array($domainIndex => true)
-                    ));
                     $this->stateStore->write($state, $previousGeneration);
-                } catch (Throwable $exception) {
-                    return $this->error(2, $exception->getMessage(), array(
-                        'domain' => $staleDomain,
-                    ));
+                    $previousGeneration = $state['generation'];
+                    $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
                 }
-
-                $logPath = $this->configManager->logEvent(
-                    'set-domain-cache.stale-domain-cleared',
-                    array(
-                        'guid' => $guid,
-                        'domain' => $staleDomain['name'],
-                        'cleanup' => $cleanupResult,
-                    )
+                $previousDomain = $domainPayload;
+            } else {
+                $liveDomain = $this->findDomainByGuid(
+                    $guid,
+                    '' !== $domainName ? $domainName : null
                 );
-                return $this->error(
-                    2,
-                    'Domain no longer exists in Plesk. Stale OLS state was cleared.',
-                    array(
-                        'domain' => $staleDomain,
-                        'cleanup' => $cleanupResult,
-                        'logPath' => $logPath,
-                    )
-                );
-            }
+                if (null === $liveDomain) {
+                    if (null === $domainIndex) {
+                        return $this->error(
+                            2,
+                            'Domain no longer exists in Plesk.'
+                        );
+                    }
+                    $previousDomain = $state['domains'][$domainIndex];
+                } else {
+                    if (null === $domainIndex) {
+                        $recoveredDomain = $this->buildDomainData($liveDomain, $state);
+                        $state['domains'] = $this->upsertDomain($state['domains'], $recoveredDomain);
+                        $state['generation'] = $previousGeneration + 1;
+                        $this->stateStore->write($state, $previousGeneration);
+                        $previousGeneration = $state['generation'];
+                        $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
+                    }
 
-            if (null === $domainIndex) {
-                $recoveredDomain = $this->buildDomainData($liveDomain, $state);
-                $state['domains'] = $this->upsertDomain($state['domains'], $recoveredDomain);
-                $state['generation'] = $previousGeneration + 1;
-                $this->stateStore->write($state, $previousGeneration);
-                $previousGeneration = $state['generation'];
-                $domainIndex = $this->findStateDomainIndex($state['domains'], $guid);
+                    $previousDomain = $this->buildDomainData(
+                        $liveDomain,
+                        $state,
+                        $state['domains'][$domainIndex]['guid']
+                    );
+                }
             }
-
-            $previousDomain = $this->buildDomainData(
-                $liveDomain,
-                $state,
-                $state['domains'][$domainIndex]['guid']
-            );
             $previousEnabled = !empty($previousDomain['cacheEnabled']);
             $updatedDomain = $previousDomain;
             $updatedDomain['cacheEnabled'] = $enabled;
@@ -2225,7 +2227,7 @@ class Modules_SkamasleOls_ControlCommand
                 && preg_match('/^\d+$/', (string) $arguments[0]);
         }
         if ('set-domain-cache' === $command) {
-            if (count($arguments) < 2 || count($arguments) > 3) {
+            if (count($arguments) < 2 || count($arguments) > 4) {
                 return false;
             }
             if (null === $this->normalizeGuidArgument($arguments[0])) {
@@ -2237,7 +2239,13 @@ class Modules_SkamasleOls_ControlCommand
             if (2 === count($arguments)) {
                 return true;
             }
-            return '' !== trim((string) $arguments[2]);
+            if ('' === trim((string) $arguments[2])) {
+                return false;
+            }
+            if (4 === count($arguments)) {
+                return is_array(json_decode((string) $arguments[3], true));
+            }
+            return true;
         }
         if ('set-domain-lsapi' === $command) {
             if (count($arguments) < 2 || count($arguments) > 4) {
@@ -2312,10 +2320,10 @@ class Modules_SkamasleOls_ControlCommand
             throw new InvalidArgumentException('LSAPI settings must be an object.');
         }
         $defaults = array(
-            'maxConnections' => 10,
-            'children' => 10,
+            'maxConnections' => 8,
+            'children' => 8,
             'instances' => 1,
-            'backlog' => 100,
+            'backlog' => 300,
             'initTimeout' => 60,
             'retryTimeout' => 0,
             'persistentConnection' => true,
@@ -2326,6 +2334,7 @@ class Modules_SkamasleOls_ControlCommand
             throw new InvalidArgumentException('LSAPI settings contain unknown properties.');
         }
         $normalized = array_merge($defaults, $settings);
+        $normalized['children'] = $normalized['maxConnections'];
         $limits = array(
             'maxConnections' => array(1, 1000),
             'children' => array(1, 1000),

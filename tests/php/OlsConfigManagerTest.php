@@ -269,13 +269,18 @@ try {
         'Vhost config must use the Plesk php.ini directory'
     );
     assertSameValue(true, false !== strpos($vhconfContent, 'maxConns 24'), 'LSAPI max connections must be configurable');
-    assertSameValue(true, false !== strpos($vhconfContent, 'env PHP_LSAPI_CHILDREN=20'), 'LSAPI children must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'env PHP_LSAPI_CHILDREN=24'), 'LSAPI children must follow maxConns');
+    assertSameValue(true, false !== strpos($vhconfContent, 'env PHP_LSAPI_MAX_REQUESTS=1000'), 'LSAPI max requests must be configured');
+    assertSameValue(true, false !== strpos($vhconfContent, 'env LSAPI_AVOID_FORK=100M'), 'LSAPI avoid fork must be configured');
+    assertSameValue(true, false !== strpos($vhconfContent, 'env LSAPI_ACCEPT_NOTIFY=1'), 'LSAPI accept notify must be configured');
     assertSameValue(true, false !== strpos($vhconfContent, 'instances 2'), 'LSAPI instances must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'backlog 250'), 'LSAPI backlog must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'initTimeout 90'), 'LSAPI init timeout must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'retryTimeout 5'), 'LSAPI retry timeout must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'persistConn 0'), 'LSAPI persistent connections must be configurable');
     assertSameValue(true, false !== strpos($vhconfContent, 'respBuffer 1'), 'LSAPI response buffering must be configurable');
+    assertSameValue(true, false !== strpos($vhconfContent, 'enableGzip 0'), 'Gzip must default off');
+    assertSameValue(true, false !== strpos($vhconfContent, 'enableBr 0'), 'Brotli must default off');
     assertSameValue(
         true,
         false !== strpos($vhconfContent, 'module cache {'),

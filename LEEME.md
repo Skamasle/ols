@@ -56,7 +56,7 @@ instancias, backlog, timeouts, conexión persistente y buffer de respuesta.
 Los ZIP finales se publican en `build/` y se instalan con:
 
 ```bash
-plesk bin extension -i "build/skamasle-ols-plesk-<version>-<release>.zip"
+plesk bin extension -i "build/skamasle-ols-plesk-latest.zip"
 ```
 
 ## La idea
