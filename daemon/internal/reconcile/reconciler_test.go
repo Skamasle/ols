@@ -139,7 +139,7 @@ func TestDecideNoopForNativeDomain(t *testing.T) {
 	}
 }
 
-func TestDecideHoldsReviewFindings(t *testing.T) {
+func TestDecideReloadsEvenWithReviewFindings(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "desired-state.json")
 	writeState(t, statePath, olsState)
@@ -159,8 +159,8 @@ func TestDecideHoldsReviewFindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if decision.Action != ActionReview {
-		t.Fatalf("expected review, got %s", decision.Action)
+	if decision.Action != ActionReload {
+		t.Fatalf("expected reload, got %s", decision.Action)
 	}
 	if decision.FindingCount != 1 {
 		t.Fatalf("expected one finding, got %d", decision.FindingCount)

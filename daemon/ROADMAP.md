@@ -31,7 +31,8 @@ La primera version del agente debe cubrir solo esto:
 - encolar reconciliacion por dominio;
 - regenerar estado derivado cuando proceda;
 - validar configuracion OLS antes de aplicar reload;
-- ejecutar graceful reload solo cuando sea necesario;
+- ejecutar graceful reload tras cada cambio relevante en dominios `ols`;
+- registrar findings del scanner como base para reglas de riesgo futuras;
 - registrar logs y metricas basicas del agente.
 
 Queda fuera en esta fase:
@@ -138,7 +139,8 @@ Criterio de salida:
 - comparar `phpHandlerId`, version PHP, `prepared`, routing y estado `.htaccess`;
 - regenerar runtime derivado si cambia el dominio;
 - validar OLS antes de aplicar reload;
-- hacer rollback logico cuando el reconcile no sea seguro.
+- hacer rollback logico cuando el reconcile no sea seguro;
+- mantener el scanner como fuente de observabilidad y futura lista de patrones inseguros.
 
 Criterio de salida:
 

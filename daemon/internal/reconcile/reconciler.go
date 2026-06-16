@@ -75,50 +75,37 @@ func (r *Reconciler) Decide(event eventqueue.Event) (Decision, error) {
 		}, nil
 	}
 
+	reason := fmt.Sprintf("ols domain %s requires reload for htaccess change under %s", domain.Name, root)
+	filesScanned := 0
+	findingCount := 0
 	if nil == r.scanner {
 		return Decision{
-			Action:     ActionBlocked,
-			DomainName: domain.Name,
-			DomainRoot: root,
-			Reason:     "htaccess scanner is unavailable",
-			Generation: st.Generation,
-			Routing:    domain.AppliedRouting,
+			Action:       ActionReload,
+			DomainName:   domain.Name,
+			DomainRoot:   root,
+			Reason:       reason + " (htaccess scanner unavailable)",
+			Generation:   st.Generation,
+			Routing:      domain.AppliedRouting,
+			FilesScanned: filesScanned,
+			FindingCount: findingCount,
 		}, nil
 	}
 
 	scan := r.scanner.Scan(domain.DocumentRoot)
-	if "blocked" == scan.Status {
-		return Decision{
-			Action:       ActionBlocked,
-			DomainName:   domain.Name,
-			DomainRoot:   root,
-			Reason:       scan.Summary(),
-			Generation:   st.Generation,
-			Routing:      domain.AppliedRouting,
-			FilesScanned: scan.FilesScanned,
-			FindingCount: len(scan.Findings),
-		}, nil
-	}
-	if "review" == scan.Status {
-		return Decision{
-			Action:       ActionReview,
-			DomainName:   domain.Name,
-			DomainRoot:   root,
-			Reason:       scan.Summary(),
-			Generation:   st.Generation,
-			Routing:      domain.AppliedRouting,
-			FilesScanned: scan.FilesScanned,
-			FindingCount: len(scan.Findings),
-		}, nil
+	filesScanned = scan.FilesScanned
+	findingCount = len(scan.Findings)
+	if "blocked" == scan.Status || "review" == scan.Status {
+		reason = scan.Summary() + "; reloading anyway and keeping findings for future deny-list tuning"
 	}
 
 	return Decision{
 		Action:       ActionReload,
 		DomainName:   domain.Name,
 		DomainRoot:   root,
-		Reason:       fmt.Sprintf("compatible htaccess change under %s", root),
+		Reason:       reason,
 		Generation:   st.Generation,
 		Routing:      domain.AppliedRouting,
-		FilesScanned: scan.FilesScanned,
+		FilesScanned: filesScanned,
+		FindingCount: findingCount,
 	}, nil
 }

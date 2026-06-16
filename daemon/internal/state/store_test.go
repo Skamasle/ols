@@ -94,7 +94,17 @@ const validState = `{
         "pleskHandlerId": "plesk-php83-fpm",
         "version": "8.3",
         "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp",
-        "socket": "/tmp/example.sock"
+        "socket": "/tmp/example.sock",
+        "lsapi": {
+          "maxConnections": 8,
+          "children": 8,
+          "instances": 1,
+          "backlog": 100,
+          "initTimeout": 60,
+          "retryTimeout": 0,
+          "persistentConnection": true,
+          "responseBuffering": false
+        }
       },
       "requestedRouting": "ols",
       "appliedRouting": "ols"

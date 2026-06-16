@@ -8,8 +8,8 @@ The current implementation focuses on `.htaccess` changes:
 - groups rapid changes by vhost with a debounce queue;
 - reads the extension desired state;
 - ignores domains whose applied routing is not `ols`;
-- rescans `.htaccess` compatibility before acting;
-- holds reloads that require review or cannot be scanned safely;
+- rescans `.htaccess` compatibility before acting and logs findings for later rule tuning;
+- reloads OLS after every relevant change while keeping scanner output for future safety rules;
 - runs `openlitespeed -t` before each graceful reload.
 
 The agent remains a separate deliverable and is not included in the Plesk
@@ -48,7 +48,8 @@ Install the binary as `/usr/local/bin/skamasle-ols-agent` and use
 `skamasle-ols-agent.service` as the systemd unit.
 
 The current phase does not yet persist scan results back into Plesk or restore
-native routing automatically when a new incompatibility is found. It blocks
-the reload and logs the reason instead.
+native routing automatically when a new incompatibility is found. Scanner
+results are advisory for now and are meant to grow into a deny-list of known
+unsafe patterns over time.
 
 See [ROADMAP.md](ROADMAP.md) for the implementation path.

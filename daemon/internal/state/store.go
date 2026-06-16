@@ -55,6 +55,18 @@ type PHP struct {
 	Version        string `json:"version"`
 	LsphpBinary    string `json:"lsphpBinary"`
 	Socket         string `json:"socket"`
+	Lsapi          LSAPI  `json:"lsapi"`
+}
+
+type LSAPI struct {
+	MaxConnections       int  `json:"maxConnections"`
+	Children             int  `json:"children"`
+	Instances            int  `json:"instances"`
+	Backlog              int  `json:"backlog"`
+	InitTimeout          int  `json:"initTimeout"`
+	RetryTimeout         int  `json:"retryTimeout"`
+	PersistentConnection bool `json:"persistentConnection"`
+	ResponseBuffering    bool `json:"responseBuffering"`
 }
 
 type Store struct {

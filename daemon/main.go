@@ -101,9 +101,25 @@ func main() {
 			case reconcile.ActionNoop:
 				info("No reconcile needed for " + event.Key + ": " + decision.Reason)
 			case reconcile.ActionReview:
-				warn("Holding reload for " + decision.DomainName + ": .htaccess requires review (" + decision.Reason + ")")
+				if err := olsManager.Validate(); err != nil {
+					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
+					continue
+				}
+				count := atomic.AddInt64(&reloads, 1)
+				warn("Reloading despite review for " + decision.DomainName + ": " + decision.Reason + " (reloads: " + itoa64(count) + ")")
+				if err := olsManager.Reload(); err != nil {
+					warn("OLS reload failed for " + event.Key + ": " + err.Error())
+				}
 			case reconcile.ActionBlocked:
-				warn("Blocking reload for " + decision.DomainName + ": " + decision.Reason)
+				if err := olsManager.Validate(); err != nil {
+					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
+					continue
+				}
+				count := atomic.AddInt64(&reloads, 1)
+				warn("Reloading despite blocked scan for " + decision.DomainName + ": " + decision.Reason + " (reloads: " + itoa64(count) + ")")
+				if err := olsManager.Reload(); err != nil {
+					warn("OLS reload failed for " + event.Key + ": " + err.Error())
+				}
 			case reconcile.ActionMissing:
 				warn("Skipping reconcile for " + event.Key + ": " + decision.Reason)
 			default:
