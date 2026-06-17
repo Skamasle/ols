@@ -59,6 +59,49 @@ Los ZIP finales se publican en `build/` y se instalan con:
 plesk bin extension -i "build/skamasle-ols-plesk-latest.zip"
 ```
 
+## Generar la extensión
+
+Compila el ZIP de la extensión de Plesk desde la raíz del repositorio con:
+
+```bash
+bash scripts/build-extension.sh
+```
+
+El script prepara `extension/` dentro de un archivo nuevo en `build/` y
+incrementa automáticamente el número de release. El archivo resultante sigue
+este patrón:
+
+```text
+build/skamasle-ols-plesk-<version>-<release>.zip
+```
+
+Después de construirlo, valida el paquete con:
+
+```bash
+bash tests/package.sh
+```
+
+Esa comprobación revisa el contenido del ZIP, confirma los metadatos del
+módulo y asegura que no se hayan colado archivos de desarrollo en el paquete.
+
+## Capturas
+
+Aquí conviene añadir capturas anotadas desde Plesk cuando las tengas.
+Imágenes sugeridas:
+
+- el panel principal de la extensión y el resumen de capacidades;
+- la vista de inventario de dominios;
+- el resultado de compatibilidad de un dominio compatible y otro incompatible;
+- la acción de instalación de OpenLiteSpeed y su resultado;
+- el estado de routing nativo frente a OLS para un dominio.
+
+Ejemplo de disposición:
+
+![Panel de la extensión](./screenshot/dashboard.png)
+![Estado instalado](./screenshot/domain-installed.png)
+![Compatibilidad de dominio](./screenshot/domain-readiness.png)
+![LSCache](./screenshot/lscache.png)
+
 ## La idea
 
 Una instalación Plesk ya dispone de dos modalidades nativas:
