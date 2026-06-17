@@ -9,9 +9,11 @@ exact ZIP artifact and does not replace earlier builds.
   `maxConns` and `PHP_LSAPI_CHILDREN`.
 - Update the injected LSAPI defaults to use `maxConns 8`,
   `PHP_LSAPI_CHILDREN=8`, `PHP_LSAPI_MAX_REQUESTS=1000`,
-  `LSAPI_AVOID_FORK=100M`, `LSAPI_ACCEPT_NOTIFY=1`, and `backlog 300`.
+  `LSAPI_AVOID_FORK=100M`, `LSAPI_ACCEPT_NOTIFY=1`, and `backlog 100`.
 - Disable `enableGzip` and `enableBr` by default in managed vhosts.
 - Fix LSCache activation.
+- Allow staged OLS vhosts to be reverted from the domain table without first
+  activating OLS routing.
 
 ## 0.1.1-beta
 

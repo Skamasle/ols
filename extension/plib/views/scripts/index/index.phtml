@@ -546,6 +546,10 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                             $cacheButtonLabel = $cacheEnabled
                                 ? 'Disable LSCache'
                                 : 'Enable LSCache';
+                            $prepared = !empty($domain['prepared']);
+                            $requestedRouting = isset($domain['requestedRouting'])
+                                ? $domain['requestedRouting']
+                                : 'native';
                             $lsapi = isset($domain['lsapi']) && is_array($domain['lsapi'])
                                 ? $domain['lsapi']
                                 : array();
@@ -713,7 +717,7 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                         <span class="skamasle-ols-pill <?php echo $pillClass('ols' === $domain['requestedRouting']); ?>">
                                             <?php echo $escape($routingLabel); ?>
                                         </span>
-                                        <?php if (empty($domain['prepared'])): ?>
+                                        <?php if (!$prepared): ?>
                                             <form method="post" action="<?php echo $escape($this->prepareDomainVhostUrl); ?>">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
                                                 <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
@@ -733,13 +737,29 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                                     Rebuild OLS vhost
                                                 </button>
                                             </form>
-                                            <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
-                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <input type="hidden" name="routing" value="<?php echo $escape('ols' === $domain['requestedRouting'] ? 'native' : 'ols'); ?>">
-                                                <button type="submit" class="btn <?php echo 'ols' === $domain['requestedRouting'] ? 'skamasle-ols-btn-danger' : 'skamasle-ols-btn-primary'; ?>">
-                                                    <?php echo $escape('ols' === $domain['requestedRouting'] ? 'Disable OLS' : 'Enable OLS'); ?>
-                                                </button>
-                                            </form>
+                                            <?php if ('ols' === $requestedRouting): ?>
+                                                <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <input type="hidden" name="routing" value="native">
+                                                    <button type="submit" class="btn skamasle-ols-btn-danger">
+                                                        Disable OLS
+                                                    </button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <input type="hidden" name="routing" value="ols">
+                                                    <button type="submit" class="btn skamasle-ols-btn-primary">
+                                                        Enable OLS
+                                                    </button>
+                                                </form>
+                                                <form method="post" action="<?php echo $escape($this->resetDomainVhostUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <button type="submit" class="btn skamasle-ols-btn-danger">
+                                                        Remove staged vhost
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                         <span class="skamasle-ols-inline-note">
                                             <?php

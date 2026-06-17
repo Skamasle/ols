@@ -941,6 +941,8 @@ class IndexController extends pm_Controller_Action
             . 'index.php/index/prepare-domain-vhost';
         $this->view->stageAndEnableDomainVhostUrl = pm_Context::getBaseUrl()
             . 'index.php/index/stage-and-enable-domain-vhost';
+        $this->view->resetDomainVhostUrl = pm_Context::getBaseUrl()
+            . 'index.php/index/reset-domain-vhost';
         $this->view->setDomainRoutingUrl = pm_Context::getBaseUrl()
             . 'index.php/index/set-domain-routing';
         $this->view->stylesheetUrl = pm_Context::getBaseUrl()

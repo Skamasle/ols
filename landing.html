@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skamasle OLS Connector</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --bg2: #0e1b30;
+      --panel: rgba(10, 18, 33, 0.78);
+      --panel-strong: rgba(14, 24, 44, 0.94);
+      --line: rgba(140, 180, 255, 0.16);
+      --text: #eaf0ff;
+      --muted: #aebdd6;
+      --accent: #7dd3fc;
+      --accent2: #8b5cf6;
+      --good: #34d399;
+      --warn: #fbbf24;
+      --shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(125, 211, 252, 0.16), transparent 34%),
+        radial-gradient(circle at 80% 10%, rgba(139, 92, 246, 0.20), transparent 28%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+      line-height: 1.5;
+    }
+
+    .wrap {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: 1.25fr 0.9fr;
+      align-items: stretch;
+      margin-top: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero-main {
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      inset: auto -60px -60px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(125, 211, 252, 0.22), transparent 62%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(125, 211, 252, 0.08);
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      color: var(--accent);
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--good);
+      box-shadow: 0 0 0 5px rgba(52, 211, 153, 0.15);
+    }
+
+    h1 {
+      margin: 18px 0 14px;
+      font-size: clamp(2.6rem, 6vw, 4.8rem);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      max-width: 12ch;
+    }
+
+    .lead {
+      max-width: 62ch;
+      color: var(--muted);
+      font-size: 1.03rem;
+      margin: 0 0 22px;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 14px;
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      border-color: rgba(125, 211, 252, 0.44);
+      background: rgba(125, 211, 252, 0.08);
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, rgba(125, 211, 252, 0.22), rgba(139, 92, 246, 0.22));
+      border-color: rgba(125, 211, 252, 0.28);
+    }
+
+    .hero-side {
+      display: grid;
+      gap: 16px;
+      padding: 20px;
+    }
+
+    .mini {
+      padding: 18px;
+      border-radius: 18px;
+      background: var(--panel-strong);
+      border: 1px solid var(--line);
+    }
+
+    .mini h2,
+    .section h2 {
+      margin: 0 0 10px;
+      font-size: 1.06rem;
+      letter-spacing: -0.02em;
+    }
+
+    .mini p,
+    .section p,
+    .section li,
+    .mini li {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .card {
+      padding: 20px;
+      border-radius: 20px;
+      background: rgba(12, 21, 38, 0.82);
+      border: 1px solid var(--line);
+      min-height: 100%;
+    }
+
+    .card .tag {
+      display: inline-block;
+      margin-bottom: 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+
+    .section {
+      margin-top: 18px;
+      padding: 22px 24px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .logbox {
+      padding: 18px;
+      border-radius: 18px;
+      background: #06101e;
+      border: 1px solid rgba(140, 180, 255, 0.15);
+      overflow: auto;
+    }
+
+    pre {
+      margin: 0;
+      color: #c8d7ef;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .note {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(125, 211, 252, 0.06);
+      border: 1px solid rgba(125, 211, 252, 0.16);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .good { color: #9ef0c1; border-color: rgba(52, 211, 153, 0.26); }
+    .warn { color: #fde68a; border-color: rgba(251, 191, 36, 0.24); }
+
+    ol.steps {
+      margin: 10px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    ol.steps li + li {
+      margin-top: 10px;
+    }
+
+    ul.clean {
+      list-style: none;
+      padding: 0;
+      margin: 10px 0 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    ul.clean li {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    ul.clean li::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      margin-top: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      flex: 0 0 auto;
+    }
+
+    .footer {
+      margin-top: 18px;
+      padding: 18px 22px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 900px) {
+      .hero,
+      .grid-2,
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-main {
+        padding: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <article class="panel hero-main">
+        <span class="eyebrow">Plesk + OpenLiteSpeed + control por dominio</span>
+        <h1>Un sistema que conecta Plesk con OLS sin romper Apache ni nginx</h1>
+        <p class="lead">
+          Skamasle OLS Connector gestiona dominios de forma individual: mantiene Apache instalado,
+          deja nginx como frontend publico y usa OpenLiteSpeed como backend privado en loopback.
+          El modulo se encarga del estado y la configuracion; el daemon observa cambios y aplica
+          reloads seguros cuando detecta actividad en <code>.htaccess</code>.
+        </p>
+        <div class="cta-row">
+          <a class="btn primary" href="#como-funciona">Como funciona</a>
+          <a class="btn primary" href="https://TU-ENLACE-DE-DESCARGA-AQUI.zip">Descargar</a>
+          <a class="btn" href="#daemon">Ver daemon</a>
+          <a class="btn" href="#log">Ejemplo de actividad</a>
+        </div>
+        <div class="note">
+          Enlace de descarga e instrucciones de instalacion pensados para que los edites facilmente.
+        </div>
+      </article>
+
+      <aside class="panel hero-side">
+        <div class="mini">
+          <h2>Modelo operativo</h2>
+          <p>Cada dominio se gestiona como <code>native</code> o <code>ols</code>.</p>
+        </div>
+        <div class="mini">
+          <h2>Seguridad practica</h2>
+          <p>Si algo no esta claro, el sistema conserva la ruta nativa y evita cambios destructivos.</p>
+        </div>
+        <div class="mini">
+          <h2>Daemon</h2>
+          <p>Vigila <code>/var/www/vhosts</code>, agrupa cambios, analiza <code>.htaccess</code> y dispara recargas.</p>
+        </div>
+      </aside>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <span class="tag">Modulo Plesk</span>
+        <h2>Control desde el panel</h2>
+        <p>Gestiona listener, routing, LSAPI, LSCache, plantillas y estado deseado de cada dominio.</p>
+      </article>
+      <article class="card">
+        <span class="tag">Daemon</span>
+        <h2>Vigilancia continua</h2>
+        <p>Detecta cambios en <code>.htaccess</code>, agrupa eventos y valida OLS antes de recargar.</p>
+      </article>
+      <article class="card">
+        <span class="tag">Resultado</span>
+        <h2>Menos friccion</h2>
+        <p>La plataforma conserva el flujo clasico de Plesk y suma OLS solo donde aporta valor real.</p>
+      </article>
+    </section>
+
+    <section id="como-funciona" class="panel section">
+      <h2>Como funciona en terminos generales</h2>
+      <p>
+        El modulo mantiene el estado deseado de cada dominio y escribe la configuracion de OLS.
+        Cuando un dominio esta marcado como <code>ols</code>, el daemon vigila su <code>httpdocs</code>,
+        detecta cambios de <code>.htaccess</code>, comprueba que la configuracion de OLS siga siendo valida
+        y realiza un <code>reload</code> si el cambio afecta al dominio.
+      </p>
+      <div class="grid-2">
+        <div>
+          <ul class="clean">
+            <li>El panel de Plesk decide routing, LSAPI, LSCache y preparacion del vhost.</li>
+            <li>El daemon observa cambios externos que el panel no ve en tiempo real.</li>
+            <li>El scanner de <code>.htaccess</code> deja trazas para ampliar reglas de riesgo despues.</li>
+            <li>La recarga de OLS ocurre sin reemplazar Apache ni tocar nginx como frontend.</li>
+          </ul>
+        </div>
+        <div class="mini">
+          <h2>Politica actual</h2>
+          <p>Primero recargar y observar. Luego afinar reglas si aparecen casos que rompan algo.</p>
+          <div class="pill-row">
+            <span class="pill good">Apache se mantiene</span>
+            <span class="pill good">nginx sigue delante</span>
+            <span class="pill good">OLS en backend privado</span>
+            <span class="pill warn">Reglas de riesgo en evolucion</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="daemon" class="panel section">
+      <h2>Daemon independiente</h2>
+      <p>
+        El agente se ejecuta aparte del ZIP del modulo. Su trabajo es sencillo: ver cambios relevantes,
+        agruparlos con debounce, comprobar el estado del dominio y recargar OLS cuando procede.
+      </p>
+      <div class="pill-row">
+        <span class="pill">fsnotify</span>
+        <span class="pill">debounce por dominio</span>
+        <span class="pill">validacion de OLS</span>
+        <span class="pill">reload por cambio</span>
+      </div>
+    </section>
+
+    <section id="log" class="panel section">
+      <h2>Ejemplo de actividad real</h2>
+      <p>Este tipo de salida muestra que el agente detecto cambios y aplico una recarga al dominio.</p>
+      <div class="logbox">
+        <pre><code>Jun 16 12:40:02 localhost.localdomain skamasle-ols-agent[5823]: Detected .htaccess change: /var/www/vhosts/wpols.skamasle.com/httpdocs/.htaccess [RENAME]
+Jun 16 12:40:02 localhost.localdomain skamasle-ols-agent[5823]: Detected .htaccess change: /var/www/vhosts/wpols.skamasle.com/httpdocs/.htaccess [CREATE]
+Jun 16 12:40:02 localhost.localdomain skamasle-ols-agent[5823]: Detected .htaccess change: /var/www/vhosts/wpols.skamasle.com/httpdocs/.htaccess [WRITE]
+Jun 16 12:40:02 localhost.localdomain skamasle-ols-agent[5823]: Detected .htaccess change: /var/www/vhosts/wpols.skamasle.com/httpdocs/.htaccess [WRITE]
+Jun 16 12:40:05 localhost.localdomain skamasle-ols-agent[5823]: Reload requested for wpols.skamasle.com after htaccess-change (reloads: 2)</code></pre>
+      </div>
+    </section>
+
+    <section class="panel section">
+      <h2>Que aporta el sistema</h2>
+      <ul class="clean">
+        <li>Despliegue por dominio, no un cambio global de servidor.</li>
+        <li>Menos riesgo operativo, porque la ruta nativa sigue disponible.</li>
+        <li>Visibilidad real de cambios en archivos que afectan al sitio.</li>
+        <li>Base clara para ir ampliando reglas de compatibilidad con el tiempo.</li>
+      </ul>
+    </section>
+
+    <section class="panel section">
+      <h2>Instrucciones de instalacion</h2>
+      <ol class="steps">
+        <li>Descarga el paquete desde el enlace que hayas configurado arriba.</li>
+        <li>Instala el modulo en Plesk y activa el daemon independiente si lo vas a usar.</li>
+        <li>Marca los dominios que quieras mover a <code>ols</code> y prepara su vhost.</li>
+        <li>Verifica el estado del daemon, edita <code>.htaccess</code> y comprueba los logs.</li>
+      </ol>
+      <div class="note">
+        Aqui puedes sustituir estos pasos por tus instrucciones reales de despliegue.
+      </div>
+    </section>
+
+    <footer class="panel footer">
+      Skamasle OLS Connector · Plesk, OpenLiteSpeed y control de dominios con un flujo conservador.
+    </footer>
+  </main>
+</body>
+</html>

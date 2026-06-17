@@ -27,7 +27,7 @@ El modulo y el agente son dos entregables distintos del mismo proyecto.
 La primera version del agente debe cubrir solo esto:
 
 - detectar cambios en `.htaccess` de dominios `ols`;
-- detectar cambios relevantes de dominio/hosting/PHP desde Plesk;
+- detectar cambios relevantes de dominio/hosting/PHP desde Plesk, ya cubiertos de forma funcional en la primera version;
 - encolar reconciliacion por dominio;
 - regenerar estado derivado cuando proceda;
 - validar configuracion OLS antes de aplicar reload;
@@ -152,6 +152,8 @@ Criterio de salida:
 - metricas basicas;
 - ultima reconciliacion por dominio;
 - causas de reload y de no-op;
+- rate limit de reloads para evitar bucles de reinicios;
+- endurecimiento de ejecucion del daemon y revision del usuario/grupo con el que corre;
 - estado del agente visible para el modulo en una fase posterior.
 
 Criterio de salida:
@@ -213,6 +215,7 @@ El agente puede leer estado compartido desde:
 - recargas excesivas por cambios masivos;
 - eventos de Plesk perdidos o incompletos;
 - consumo excesivo de inotify en servidores con muchos vhosts;
+- limite de watchers por dominio o estrategia alternativa para directorios demasiado profundos;
 - reconciliaciones concurrentes sobre el mismo dominio;
 - asumir que todos los cambios de PHP pasan por la misma ruta de evento.
 
