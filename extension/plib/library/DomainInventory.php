@@ -75,6 +75,11 @@ class Modules_SkamasleOls_DomainInventory
                     'skamasle-ols.lscache',
                     '0'
                 );
+                $item['cachePrivateEnabled'] = $item['cacheEnabled']
+                    && '1' === $domain->getSetting(
+                    'skamasle-ols.lscache_private',
+                    '0'
+                );
                 $item['lsapi'] = $this->readLsapiSettings($domain);
                 $item['requestedRouting'] = $domain->getSetting(
                     'skamasle-ols.routing',

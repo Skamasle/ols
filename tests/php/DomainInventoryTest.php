@@ -149,6 +149,9 @@ class TestDomain
         if ('skamasle-ols.lscache' === $key) {
             return $this->prepared ? '1' : '0';
         }
+        if ('skamasle-ols.lscache_private' === $key) {
+            return '0';
+        }
         if ('skamasle-ols.routing' === $key) {
             return $this->prepared ? 'ols' : 'native';
         }

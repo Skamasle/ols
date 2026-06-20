@@ -523,7 +523,18 @@ class Modules_SkamasleOls_ControlCommand
         if ('set-domain-cache' === $command) {
             $guid = $this->normalizeGuidArgument($arguments[0]);
             $enabled = $this->parseBooleanArgument($arguments[1]);
-            $domainName = isset($arguments[2]) ? trim((string) $arguments[2]) : '';
+            $privateEnabled = false;
+            $argumentOffset = 2;
+            if (isset($arguments[2])
+                && null !== $this->parseBooleanArgument($arguments[2])
+            ) {
+                $privateEnabled = $enabled
+                    && $this->parseBooleanArgument($arguments[2]);
+                $argumentOffset = 3;
+            }
+            $domainName = isset($arguments[$argumentOffset])
+                ? trim((string) $arguments[$argumentOffset])
+                : '';
             $domainPayload = null;
             if (null === $guid || null === $enabled) {
                 return $this->error(
@@ -532,9 +543,12 @@ class Modules_SkamasleOls_ControlCommand
                 );
             }
 
-            if (isset($arguments[3])) {
+            if (isset($arguments[$argumentOffset + 1])) {
                 try {
-                    $decodedPayload = json_decode((string) $arguments[3], true);
+                    $decodedPayload = json_decode(
+                        (string) $arguments[$argumentOffset + 1],
+                        true
+                    );
                     if (!is_array($decodedPayload)) {
                         throw new InvalidArgumentException(
                             'Invalid LSCache domain payload.'
@@ -607,15 +621,19 @@ class Modules_SkamasleOls_ControlCommand
                 }
             }
             $previousEnabled = !empty($previousDomain['cacheEnabled']);
+            $previousPrivateEnabled = !empty($previousDomain['cachePrivateEnabled']);
             $updatedDomain = $previousDomain;
             $updatedDomain['cacheEnabled'] = $enabled;
+            $updatedDomain['cachePrivateEnabled'] = $enabled && $privateEnabled;
             $logPath = $this->configManager->logEvent(
                 'set-domain-cache.begin',
                 array(
                     'guid' => $guid,
                     'domain' => $previousDomain['name'],
                     'previousEnabled' => $previousEnabled,
+                    'previousPrivateEnabled' => $previousPrivateEnabled,
                     'requestedEnabled' => $enabled,
+                    'requestedPrivateEnabled' => $enabled && $privateEnabled,
                 )
             );
             $operationContext = array();
@@ -686,6 +704,7 @@ class Modules_SkamasleOls_ControlCommand
                         'guid' => $guid,
                         'domain' => $previousDomain['name'],
                         'requestedEnabled' => $enabled,
+                        'requestedPrivateEnabled' => $enabled && $privateEnabled,
                         'error' => $exception->getMessage(),
                         'operation' => $operationContext,
                     )
@@ -693,6 +712,7 @@ class Modules_SkamasleOls_ControlCommand
                 return $this->error(2, $exception->getMessage(), array(
                     'domain' => $previousDomain,
                     'cacheEnabled' => $enabled,
+                    'cachePrivateEnabled' => $enabled && $privateEnabled,
                     'logPath' => $logPath,
                 ));
             }
@@ -703,6 +723,7 @@ class Modules_SkamasleOls_ControlCommand
                     'guid' => $guid,
                     'domain' => $previousDomain['name'],
                     'cacheEnabled' => $enabled,
+                    'cachePrivateEnabled' => $enabled && $privateEnabled,
                     'generation' => $state['generation'],
                 )
             );
@@ -711,6 +732,7 @@ class Modules_SkamasleOls_ControlCommand
                 'generation' => $state['generation'],
                 'domain' => $state['domains'][$domainIndex],
                 'cacheEnabled' => $enabled,
+                'cachePrivateEnabled' => $enabled && $privateEnabled,
                 'vhostConfig' => $vhostResult,
                 'logPath' => $logPath,
             ));
@@ -1302,6 +1324,7 @@ class Modules_SkamasleOls_ControlCommand
             $state['domains'][$domainIndex]['requestedRouting'] = 'native';
             $state['domains'][$domainIndex]['appliedRouting'] = 'native';
             $state['domains'][$domainIndex]['cacheEnabled'] = false;
+            $state['domains'][$domainIndex]['cachePrivateEnabled'] = false;
             if (isset($state['domains'][$domainIndex]['php'])
                 && is_array($state['domains'][$domainIndex]['php'])
             ) {
@@ -1695,6 +1718,10 @@ class Modules_SkamasleOls_ControlCommand
             'cacheEnabled' => isset($payload['cacheEnabled'])
                 ? (bool) $payload['cacheEnabled']
                 : false,
+            'cachePrivateEnabled' => !empty($payload['cacheEnabled'])
+                && isset($payload['cachePrivateEnabled'])
+                ? (bool) $payload['cachePrivateEnabled']
+                : false,
         );
 
         return $domain;
@@ -1712,11 +1739,17 @@ class Modules_SkamasleOls_ControlCommand
             if (array_key_exists('cacheEnabled', $existing)) {
                 $domain['cacheEnabled'] = (bool) $existing['cacheEnabled'];
             }
+            if (array_key_exists('cachePrivateEnabled', $existing)) {
+                $domain['cachePrivateEnabled'] = (bool) $existing['cachePrivateEnabled'];
+            }
             if (isset($existing['php']['lsapi'])
                 && (!isset($domain['php']['lsapi']) || empty($domain['php']['lsapi']))
             ) {
                 $domain['php']['lsapi'] = $existing['php']['lsapi'];
             }
+        }
+        if (empty($domain['cacheEnabled'])) {
+            $domain['cachePrivateEnabled'] = false;
         }
         return $domain;
     }
@@ -1753,6 +1786,11 @@ class Modules_SkamasleOls_ControlCommand
                 'Unable to determine the Plesk PHP version for this domain.'
             );
         }
+        $cacheEnabled = $existing && array_key_exists('cacheEnabled', $existing)
+            ? (bool) $existing['cacheEnabled']
+            : (method_exists($domain, 'getSetting')
+                ? '1' === (string) $domain->getSetting('skamasle-ols.lscache', '0')
+                : false);
 
         $domain = array(
             'guid' => $guid,
@@ -1785,10 +1823,15 @@ class Modules_SkamasleOls_ControlCommand
                     ? $existing['php']['lsapi']
                     : $this->normalizeLsapiSettings(array()),
             ),
-            'cacheEnabled' => $existing && array_key_exists('cacheEnabled', $existing)
-                ? (bool) $existing['cacheEnabled']
-                : (method_exists($domain, 'getSetting')
-                    ? '1' === (string) $domain->getSetting('skamasle-ols.lscache', '0')
+            'cacheEnabled' => $cacheEnabled,
+            'cachePrivateEnabled' => $existing
+                && array_key_exists('cachePrivateEnabled', $existing)
+                ? (bool) $existing['cachePrivateEnabled']
+                : ($cacheEnabled && method_exists($domain, 'getSetting')
+                    ? '1' === (string) $domain->getSetting(
+                        'skamasle-ols.lscache_private',
+                        '0'
+                    )
                     : false),
             'requestedRouting' => $existing
                 ? $existing['requestedRouting']
@@ -1797,6 +1840,9 @@ class Modules_SkamasleOls_ControlCommand
                 ? $existing['appliedRouting']
                 : 'native',
         );
+        if (!$cacheEnabled) {
+            $domain['cachePrivateEnabled'] = false;
+        }
 
         return $domain;
     }
@@ -2227,7 +2273,7 @@ class Modules_SkamasleOls_ControlCommand
                 && preg_match('/^\d+$/', (string) $arguments[0]);
         }
         if ('set-domain-cache' === $command) {
-            if (count($arguments) < 2 || count($arguments) > 4) {
+            if (count($arguments) < 2 || count($arguments) > 5) {
                 return false;
             }
             if (null === $this->normalizeGuidArgument($arguments[0])) {
@@ -2239,13 +2285,23 @@ class Modules_SkamasleOls_ControlCommand
             if (2 === count($arguments)) {
                 return true;
             }
-            if ('' === trim((string) $arguments[2])) {
+            $offset = 2;
+            if (null !== $this->parseBooleanArgument($arguments[2])) {
+                if (3 === count($arguments)) {
+                    return true;
+                }
+                $offset = 3;
+            }
+            if ('' === trim((string) $arguments[$offset])) {
                 return false;
             }
-            if (4 === count($arguments)) {
-                return is_array(json_decode((string) $arguments[3], true));
+            if (($offset + 1) === count($arguments)) {
+                return true;
             }
-            return true;
+            if (($offset + 2) === count($arguments)) {
+                return is_array(json_decode((string) $arguments[$offset + 1], true));
+            }
+            return false;
         }
         if ('set-domain-lsapi' === $command) {
             if (count($arguments) < 2 || count($arguments) > 4) {

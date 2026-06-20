@@ -932,6 +932,8 @@ class Modules_SkamasleOls_OlsConfigManager
         $cachePath = $this->getCachePath($domain);
         $socketAddress = 'uds://' . ltrim($socket, '/');
         $cacheEnabled = !empty($domain['cacheEnabled']);
+        $cachePrivateEnabled = $cacheEnabled
+            && !empty($domain['cachePrivateEnabled']);
         $aliases = isset($domain['aliases']) && is_array($domain['aliases'])
             ? $domain['aliases']
             : array();
@@ -994,7 +996,11 @@ class Modules_SkamasleOls_OlsConfigManager
             '  autoLoadHtaccess 1',
             '}',
             '',
-            $this->renderVhostCacheModule($cacheEnabled, $cachePath),
+            $this->renderVhostCacheModule(
+                $cacheEnabled,
+                $cachePrivateEnabled,
+                $cachePath
+            ),
         ));
     }
 
@@ -1055,13 +1061,17 @@ class Modules_SkamasleOls_OlsConfigManager
         ));
     }
 
-    private function renderVhostCacheModule($enabled, $cachePath)
+    private function renderVhostCacheModule(
+        $enabled,
+        $privateEnabled,
+        $cachePath
+    )
     {
         return implode(PHP_EOL, array(
             'module cache {',
             '  ls_enabled              1',
             '  storagePath ' . $cachePath,
-            '  checkPrivateCache   0',
+            '  checkPrivateCache   ' . ($privateEnabled ? '1' : '0'),
             '  checkPublicCache    1',
             '  maxCacheObjSize     10000000',
             '  maxStaleAge         0',
@@ -1073,7 +1083,7 @@ class Modules_SkamasleOls_OlsConfigManager
             '',
             '  enableCache         ' . ($enabled ? '1' : '0'),
             '  expireInSeconds     3600',
-            '  enablePrivateCache  0',
+            '  enablePrivateCache  ' . ($privateEnabled ? '1' : '0'),
             '  privateExpireInSeconds 3600',
             '}',
             '',

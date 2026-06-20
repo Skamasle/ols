@@ -339,6 +339,7 @@ class IndexController extends pm_Controller_Action
                 }
                 $domain->setSetting('skamasle-ols.prepared', '0');
                 $domain->setSetting('skamasle-ols.lscache', '0');
+                $domain->setSetting('skamasle-ols.lscache_private', '0');
                 $domain->setSetting('skamasle-ols.lsapi', '');
                 $domain->setSetting('skamasle-ols.routing', 'native');
                 $message = 'Domain routing updated to native and OLS vhost removed.';
@@ -430,6 +431,11 @@ class IndexController extends pm_Controller_Action
         $guid = (string) $this->getRequest()->getPost('domain_guid', '');
         $domainName = (string) $this->getRequest()->getPost('domain_name', '');
         $enabled = '1' === (string) $this->getRequest()->getPost('cache_enabled', '0');
+        $privateEnabled = $enabled
+            && '1' === (string) $this->getRequest()->getPost(
+                'cache_private_enabled',
+                '0'
+            );
         $domain = $this->findDomainByGuid($guid, $domainName);
         if (null === $domain) {
             error_log(
@@ -453,10 +459,18 @@ class IndexController extends pm_Controller_Action
             'skamasle-ols.lscache',
             '0'
         );
+        $previousPrivateEnabled = '1' === $domain->getSetting(
+            'skamasle-ols.lscache_private',
+            '0'
+        );
         try {
             $domain->setSetting(
                 'skamasle-ols.lscache',
                 $enabled ? '1' : '0'
+            );
+            $domain->setSetting(
+                'skamasle-ols.lscache_private',
+                $privateEnabled ? '1' : '0'
             );
         } catch (Throwable $exception) {
             error_log(
@@ -483,6 +497,7 @@ class IndexController extends pm_Controller_Action
             'set-domain-cache',
             trim((string) $domain->getGuid(), '{}'),
             $enabled ? '1' : '0',
+            $privateEnabled ? '1' : '0',
             $domain->getName(),
             $domainPayloadJson,
         ));
@@ -491,6 +506,10 @@ class IndexController extends pm_Controller_Action
                 $domain->setSetting(
                     'skamasle-ols.lscache',
                     $previousEnabled ? '1' : '0'
+                );
+                $domain->setSetting(
+                    'skamasle-ols.lscache_private',
+                    $previousPrivateEnabled ? '1' : '0'
                 );
             } catch (Throwable $exception) {
                 error_log(
@@ -508,6 +527,9 @@ class IndexController extends pm_Controller_Action
         } else {
             $this->populateIndexView(
                 'LSCache ' . ($enabled ? 'enabled' : 'disabled')
+                . ($enabled
+                    ? ($privateEnabled ? ' with private cache' : ' with public cache only')
+                    : '')
                 . ' for ' . $domain->getName() . '.',
                 'success'
             );
@@ -1094,6 +1116,7 @@ class IndexController extends pm_Controller_Action
         } elseif (preg_match('/(?:^|[-_])php(\d+)\.(\d+)(?:[-_]|$)/i', $handlerId, $matches)) {
             $phpVersion = $matches[1] . '.' . $matches[2];
         }
+        $cacheEnabled = '1' === $domain->getSetting('skamasle-ols.lscache', '0');
         $payload = array(
             'guid' => trim((string) $domain->getGuid(), '{}'),
             'pleskId' => method_exists($domain, 'getId') ? (int) $domain->getId() : 0,
@@ -1108,7 +1131,9 @@ class IndexController extends pm_Controller_Action
                 ? (string) $domain->getSysGroupLogin()
                 : 'psacln',
             'phpHandlerId' => $handlerId,
-            'cacheEnabled' => '1' === $domain->getSetting('skamasle-ols.lscache', '0'),
+            'cacheEnabled' => $cacheEnabled,
+            'cachePrivateEnabled' => $cacheEnabled
+                && '1' === $domain->getSetting('skamasle-ols.lscache_private', '0'),
             'lsapi' => $this->domainLsapiSettings($domain),
             'requestedRouting' => $domain->getSetting(
                 'skamasle-ols.routing',

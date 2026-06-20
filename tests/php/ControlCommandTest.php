@@ -233,6 +233,7 @@ class TestOlsConfigManager extends Modules_SkamasleOls_OlsConfigManager
         $this->vhostConfigWrites[] = array(
             'guid' => $domain['guid'],
             'cacheEnabled' => !empty($domain['cacheEnabled']),
+            'cachePrivateEnabled' => !empty($domain['cachePrivateEnabled']),
         );
         if (isset($domain['php']['lsapi'])) {
             $this->lsapiWrites[] = $domain['php']['lsapi'];
@@ -694,6 +695,7 @@ try {
         'set-domain-cache',
         '{123e4567-e89b-42d3-a456-426614174000}',
         '1',
+        '1',
     ));
     assertSameValue(0, $cache['exitCode'], 'LSCache toggle must succeed');
     assertSameValue(
@@ -702,14 +704,20 @@ try {
         'Cache toggle must be reflected in the payload'
     );
     assertSameValue(
+        true,
+        $cache['payload']['cachePrivateEnabled'],
+        'Private cache toggle must be reflected in the payload'
+    );
+    assertSameValue(
         array(
             'guid' => '123e4567-e89b-42d3-a456-426614174000',
             'cacheEnabled' => true,
+            'cachePrivateEnabled' => true,
         ),
         $configManager->vhostConfigWrites[
             count($configManager->vhostConfigWrites) - 1
         ],
-        'Cache toggle must rewrite the vhost config with cache enabled'
+        'Cache toggle must rewrite the vhost config with the requested cache modes'
     );
     assertSameValue(
         'set-domain-cache.done',
@@ -778,6 +786,7 @@ try {
         'phpHandlerId' => 'plesk-php84-fpm',
         'phpVersion' => '8.4',
         'cacheEnabled' => true,
+        'cachePrivateEnabled' => true,
         'requestedRouting' => 'ols',
     );
     $clearCallsBeforePayloadUpdate = count($configManager->clearCalls);
@@ -898,12 +907,14 @@ try {
         'phpHandlerId' => 'plesk-php84-fpm',
         'phpVersion' => '8.4',
         'cacheEnabled' => false,
+        'cachePrivateEnabled' => false,
         'requestedRouting' => 'ols',
     );
     $clearCallsBeforePayloadCache = count($configManager->clearCalls);
     $payloadCache = $command->run(array(
         'set-domain-cache',
         '{123e4567-e89b-42d3-a456-426614174000}',
+        '1',
         '1',
         'example.test',
         json_encode($cacheDomainPayload),

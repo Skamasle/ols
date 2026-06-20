@@ -322,8 +322,9 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
         <div class="skamasle-ols-helper">
             The server-level cache module is registered automatically.
             Prepared OLS vhosts get a <code>module cache</code> block that
-            points to <code>$VH_ROOT/lscache</code>, and the domain toggle
-            below flips <code>enableCache</code> for that vhost.
+            points to <code>$VH_ROOT/lscache</code>. The domain controls
+            below always enable public cache first and can optionally enable
+            private cache for that vhost.
         </div>
     </div>
 
@@ -543,9 +544,7 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                 : ($domain['active'] ? 'Active' : 'Inactive');
                             $routingLabel = 'ols' === $domain['requestedRouting'] ? 'OLS' : 'Native';
                             $cacheEnabled = !empty($domain['cacheEnabled']);
-                            $cacheButtonLabel = $cacheEnabled
-                                ? 'Disable LSCache'
-                                : 'Enable LSCache';
+                            $cachePrivateEnabled = !empty($domain['cachePrivateEnabled']);
                             $prepared = !empty($domain['prepared']);
                             $requestedRouting = isset($domain['requestedRouting'])
                                 ? $domain['requestedRouting']
@@ -653,15 +652,47 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                         <span class="skamasle-ols-pill <?php echo $pillClass($cacheEnabled); ?>">
                                             <?php echo $escape($cacheEnabled ? 'Enabled' : 'Disabled'); ?>
                                         </span>
+                                        <?php if ($cacheEnabled): ?>
+                                            <span class="skamasle-ols-inline-note">
+                                                <?php echo $escape(
+                                                    $cachePrivateEnabled
+                                                        ? 'Public + private cache'
+                                                        : 'Public cache only'
+                                                ); ?>
+                                            </span>
+                                        <?php endif; ?>
                                         <?php if (!empty($domain['prepared'])): ?>
-                                            <form method="post" action="<?php echo $escape($this->setDomainCacheUrl); ?>">
-                                                <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
-                                                <input type="hidden" name="cache_enabled" value="<?php echo $escape($cacheEnabled ? '0' : '1'); ?>">
-                                                <button type="submit" class="btn <?php echo $cacheEnabled ? '' : 'skamasle-ols-btn-primary'; ?>">
-                                                    <?php echo $escape($cacheButtonLabel); ?>
-                                                </button>
-                                            </form>
+                                            <?php if ($cacheEnabled): ?>
+                                                <form method="post" action="<?php echo $escape($this->setDomainCacheUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
+                                                    <input type="hidden" name="cache_enabled" value="1">
+                                                    <label class="skamasle-ols-inline-note" style="display:block; margin: 8px 0;">
+                                                        <input type="checkbox" name="cache_private_enabled" value="1" <?php echo $cachePrivateEnabled ? 'checked="checked"' : ''; ?>>
+                                                        Enable private cache
+                                                    </label>
+                                                    <button type="submit" class="btn">Update LSCache</button>
+                                                </form>
+                                                <form method="post" action="<?php echo $escape($this->setDomainCacheUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
+                                                    <input type="hidden" name="cache_enabled" value="0">
+                                                    <button type="submit" class="btn">Disable LSCache</button>
+                                                </form>
+                                            <?php else: ?>
+                                                <form method="post" action="<?php echo $escape($this->setDomainCacheUrl); ?>">
+                                                    <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
+                                                    <input type="hidden" name="domain_name" value="<?php echo $escape($domain['name']); ?>">
+                                                    <input type="hidden" name="cache_enabled" value="1">
+                                                    <label class="skamasle-ols-inline-note" style="display:block; margin: 8px 0;">
+                                                        <input type="checkbox" name="cache_private_enabled" value="1">
+                                                        Enable private cache
+                                                    </label>
+                                                    <button type="submit" class="btn skamasle-ols-btn-primary">
+                                                        Enable LSCache
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                         <?php else: ?>
                                             <span class="skamasle-ols-inline-note">
                                                 Stage the OLS vhost first.

@@ -172,7 +172,7 @@ class Modules_SkamasleOls_DesiredStateValidator
                 'requestedRouting',
                 'appliedRouting',
             ),
-            array('cacheEnabled', 'vhostRoot'),
+            array('cacheEnabled', 'cachePrivateEnabled', 'vhostRoot'),
             $path
         );
 
@@ -206,6 +206,18 @@ class Modules_SkamasleOls_DesiredStateValidator
         $this->validateRouting($domain['appliedRouting'], $path . '.appliedRouting');
         if (array_key_exists('cacheEnabled', $domain) && !is_bool($domain['cacheEnabled'])) {
             throw new InvalidArgumentException($path . '.cacheEnabled must be boolean.');
+        }
+        if (array_key_exists('cachePrivateEnabled', $domain)
+            && !is_bool($domain['cachePrivateEnabled'])
+        ) {
+            throw new InvalidArgumentException(
+                $path . '.cachePrivateEnabled must be boolean.'
+            );
+        }
+        if (!empty($domain['cachePrivateEnabled']) && empty($domain['cacheEnabled'])) {
+            throw new InvalidArgumentException(
+                $path . '.cachePrivateEnabled requires cacheEnabled.'
+            );
         }
     }
 

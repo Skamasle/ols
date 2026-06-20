@@ -112,9 +112,18 @@ $lsapiState['domains'][0]['php']['lsapi'] = array(
 );
 $validator->validate($lsapiState);
 
+$privateCacheState = validDesiredState();
+$privateCacheState['domains'][0]['cacheEnabled'] = true;
+$privateCacheState['domains'][0]['cachePrivateEnabled'] = true;
+$validator->validate($privateCacheState);
+
 $invalidLsapiState = $lsapiState;
 $invalidLsapiState['domains'][0]['php']['lsapi']['children'] = 0;
 assertInvalidState($invalidLsapiState, 'children must be an integer');
+
+$invalidPrivateCacheState = validDesiredState();
+$invalidPrivateCacheState['domains'][0]['cachePrivateEnabled'] = true;
+assertInvalidState($invalidPrivateCacheState, 'cachePrivateEnabled requires cacheEnabled');
 
 $unknownProperty = validDesiredState();
 $unknownProperty['unexpected'] = true;

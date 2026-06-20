@@ -355,6 +355,21 @@ try {
         ),
         'Vhost cache must be enabled when requested'
     );
+    $privateEnabledVhost = $manager->writeVhostConfig($domain + array(
+        'cacheEnabled' => true,
+        'cachePrivateEnabled' => true,
+    ));
+    $privateEnabledContent = file_get_contents($privateEnabledVhost['path']);
+    assertSameValue(
+        true,
+        false !== strpos($privateEnabledContent, 'checkPrivateCache   1'),
+        'Vhost must query private cache when requested'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($privateEnabledContent, 'enablePrivateCache  1'),
+        'Vhost private cache must be enabled when requested'
+    );
     $routingContent = file_get_contents($stage['routing']['path']);
     assertSameValue(
         true,
