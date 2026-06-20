@@ -282,6 +282,17 @@ class IndexController extends pm_Controller_Action
             $this->_helper->viewRenderer->setScriptAction('index');
             return;
         }
+        if ('ols' === $routing) {
+            $nativeWebMode = $this->detectNativeWebMode($domain);
+            if ('nginx-only' === $nativeWebMode) {
+                $this->populateIndexView(
+                    'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before enabling OLS.',
+                    'warning'
+                );
+                $this->_helper->viewRenderer->setScriptAction('index');
+                return;
+            }
+        }
         if ('ols' === $routing
             && '1' !== $domain->getSetting('skamasle-ols.prepared', '0')
         ) {
@@ -704,6 +715,11 @@ class IndexController extends pm_Controller_Action
             if (null === $domain) {
                 throw new RuntimeException('Domain not found in Plesk.');
             }
+            if ('nginx-only' === $this->detectNativeWebMode($domain)) {
+                throw new RuntimeException(
+                    'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before staging or enabling OLS.'
+                );
+            }
 
             $payload = $this->buildDomainPayload($domain);
             $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
@@ -768,6 +784,11 @@ class IndexController extends pm_Controller_Action
             $domain = $this->findDomainByGuid($guid);
             if (null === $domain) {
                 throw new RuntimeException('Domain not found in Plesk.');
+            }
+            if ('nginx-only' === $this->detectNativeWebMode($domain)) {
+                throw new RuntimeException(
+                    'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before staging or enabling OLS.'
+                );
             }
 
             $payload = $this->buildDomainPayload($domain);
@@ -1117,6 +1138,7 @@ class IndexController extends pm_Controller_Action
             $phpVersion = $matches[1] . '.' . $matches[2];
         }
         $cacheEnabled = '1' === $domain->getSetting('skamasle-ols.lscache', '0');
+        $nativeWebMode = $this->detectNativeWebMode($domain);
         $payload = array(
             'guid' => trim((string) $domain->getGuid(), '{}'),
             'pleskId' => method_exists($domain, 'getId') ? (int) $domain->getId() : 0,
@@ -1131,6 +1153,7 @@ class IndexController extends pm_Controller_Action
                 ? (string) $domain->getSysGroupLogin()
                 : 'psacln',
             'phpHandlerId' => $handlerId,
+            'nativeWebMode' => $nativeWebMode,
             'cacheEnabled' => $cacheEnabled,
             'cachePrivateEnabled' => $cacheEnabled
                 && '1' === $domain->getSetting('skamasle-ols.lscache_private', '0'),
@@ -1145,6 +1168,91 @@ class IndexController extends pm_Controller_Action
         }
 
         return $payload;
+    }
+
+    private function detectNativeWebMode($domain)
+    {
+        if (is_object($domain) && method_exists($domain, 'getProperty')) {
+            try {
+                $value = $domain->getProperty('nginxServePhp');
+                $mode = $this->nativeWebModeFromFlag($value);
+                if (null !== $mode) {
+                    return $mode;
+                }
+            } catch (Throwable $exception) {
+                // Older Plesk builds do not expose this property directly.
+            }
+        }
+
+        $domainName = method_exists($domain, 'getName')
+            ? (string) $domain->getName()
+            : (method_exists($domain, 'getDisplayName')
+                ? (string) $domain->getDisplayName()
+                : '');
+        if ('' === $domainName) {
+            return null;
+        }
+
+        $pleskBinary = $this->findPleskBinary();
+        if (null === $pleskBinary) {
+            return null;
+        }
+
+        $sql = 'SELECT wsp.value '
+            . 'FROM domains d '
+            . 'JOIN dom_param dp ON dp.dom_id = d.id '
+            . 'JOIN WebServerSettingsParameters wsp ON wsp.webServerSettingsId = dp.val '
+            . 'WHERE dp.param = ' . $this->sqlLiteral('webServerSettingsId') . ' '
+            . 'AND d.name = ' . $this->sqlLiteral($domainName) . ' '
+            . 'AND wsp.name = ' . $this->sqlLiteral('nginxServePhp') . ' '
+            . 'LIMIT 1';
+        $command = escapeshellarg($pleskBinary)
+            . ' db -Ne ' . escapeshellarg($sql);
+        $output = array();
+        $exitCode = 1;
+        exec('LC_ALL=C ' . $command . ' 2>/dev/null', $output, $exitCode);
+        if (0 !== $exitCode || empty($output)) {
+            return null;
+        }
+
+        return $this->nativeWebModeFromFlag(trim((string) $output[0]));
+    }
+
+    private function nativeWebModeFromFlag($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 'nginx-only' : 'proxy';
+        }
+
+        $normalized = strtolower(trim((string) $value));
+        if ('true' === $normalized || '1' === $normalized || 'yes' === $normalized) {
+            return 'nginx-only';
+        }
+        if ('false' === $normalized || '0' === $normalized || 'no' === $normalized) {
+            return 'proxy';
+        }
+
+        return null;
+    }
+
+    private function findPleskBinary()
+    {
+        foreach (array('/usr/sbin/plesk', '/usr/local/psa/admin/bin/plesk') as $plesk) {
+            if (is_executable($plesk)) {
+                return $plesk;
+            }
+        }
+
+        return null;
+    }
+
+    private function sqlLiteral($value)
+    {
+        return "'" . str_replace(
+            array('\\', "'"),
+            array('\\\\', "\\'"),
+            (string) $value
+        ) . "'";
     }
 
     private function readDomainLsapiSettings()

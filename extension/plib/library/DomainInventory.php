@@ -58,6 +58,9 @@ class Modules_SkamasleOls_DomainInventory
                     'systemUser' => $hasHosting ? $domain->getSysUserLogin() : null,
                     'documentRoot' => $hasHosting ? $domain->getDocumentRoot() : null,
                 );
+                $item['nativeWebMode'] = $hasHosting
+                    ? $this->detectNativeWebMode($domain)
+                    : null;
                 $htaccess = $hasHosting
                     ? $this->readCachedHtaccessResult($domain)
                     : $this->hostingUnavailableHtaccessResult();
@@ -217,6 +220,91 @@ class Modules_SkamasleOls_DomainInventory
         $settings = array_merge($defaults, array_intersect_key($decoded, $defaults));
         $settings['children'] = $settings['maxConnections'];
         return $settings;
+    }
+
+    private function detectNativeWebMode($domain)
+    {
+        if (is_object($domain) && method_exists($domain, 'getProperty')) {
+            try {
+                $value = $domain->getProperty('nginxServePhp');
+                $mode = $this->nativeWebModeFromFlag($value);
+                if (null !== $mode) {
+                    return $mode;
+                }
+            } catch (Throwable $exception) {
+                // Older Plesk builds do not expose this property directly.
+            }
+        }
+
+        $domainName = method_exists($domain, 'getName')
+            ? (string) $domain->getName()
+            : (method_exists($domain, 'getDisplayName')
+                ? (string) $domain->getDisplayName()
+                : '');
+        if ('' === $domainName) {
+            return null;
+        }
+
+        $pleskBinary = $this->findPleskBinary();
+        if (null === $pleskBinary) {
+            return null;
+        }
+
+        $sql = 'SELECT wsp.value '
+            . 'FROM domains d '
+            . 'JOIN dom_param dp ON dp.dom_id = d.id '
+            . 'JOIN WebServerSettingsParameters wsp ON wsp.webServerSettingsId = dp.val '
+            . 'WHERE dp.param = ' . $this->sqlLiteral('webServerSettingsId') . ' '
+            . 'AND d.name = ' . $this->sqlLiteral($domainName) . ' '
+            . 'AND wsp.name = ' . $this->sqlLiteral('nginxServePhp') . ' '
+            . 'LIMIT 1';
+        $command = escapeshellarg($pleskBinary)
+            . ' db -Ne ' . escapeshellarg($sql);
+        $output = array();
+        $exitCode = 1;
+        exec('LC_ALL=C ' . $command . ' 2>/dev/null', $output, $exitCode);
+        if (0 !== $exitCode || empty($output)) {
+            return null;
+        }
+
+        return $this->nativeWebModeFromFlag(trim((string) $output[0]));
+    }
+
+    private function nativeWebModeFromFlag($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 'nginx-only' : 'proxy';
+        }
+
+        $normalized = strtolower(trim((string) $value));
+        if ('true' === $normalized || '1' === $normalized || 'yes' === $normalized) {
+            return 'nginx-only';
+        }
+        if ('false' === $normalized || '0' === $normalized || 'no' === $normalized) {
+            return 'proxy';
+        }
+
+        return null;
+    }
+
+    private function findPleskBinary()
+    {
+        foreach (array('/usr/sbin/plesk', '/usr/local/psa/admin/bin/plesk') as $plesk) {
+            if (is_executable($plesk)) {
+                return $plesk;
+            }
+        }
+
+        return null;
+    }
+
+    private function sqlLiteral($value)
+    {
+        return "'" . str_replace(
+            array('\\', "'"),
+            array('\\\\', "\\'"),
+            (string) $value
+        ) . "'";
     }
 
     private function notScannedHtaccessResult()

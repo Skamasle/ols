@@ -1046,6 +1046,11 @@ class Modules_SkamasleOls_ControlCommand
                 } else {
                     $domainData = $this->buildDomainData($domain, $state);
                 }
+                if ('proxy' !== $domainData['nativeProfile']['webMode']) {
+                    throw new RuntimeException(
+                        'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before staging or enabling OLS.'
+                    );
+                }
                 $this->configManager->logEvent(
                     'prepare-domain-vhost.domain-data-ok',
                     array(
@@ -1389,6 +1394,14 @@ class Modules_SkamasleOls_ControlCommand
             if (null === $domainIndex) {
                 return $this->error(2, 'Domain vhost must be prepared before activation.');
             }
+            if (!isset($state['domains'][$domainIndex]['nativeProfile']['webMode'])
+                || 'proxy' !== $state['domains'][$domainIndex]['nativeProfile']['webMode']
+            ) {
+                return $this->error(
+                    2,
+                    'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before enabling OLS.'
+                );
+            }
 
             $previousGeneration = $state['generation'];
             $previousRouting = $state['domains'][$domainIndex]['requestedRouting'];
@@ -1692,8 +1705,12 @@ class Modules_SkamasleOls_ControlCommand
                 ? (string) $payload['systemGroup']
                 : 'psacln',
             'nativeProfile' => array(
-                'webMode' => 'proxy',
-                'proxyMode' => true,
+                'webMode' => isset($payload['nativeWebMode'])
+                    && 'nginx-only' === $payload['nativeWebMode']
+                    ? 'nginx-only'
+                    : 'proxy',
+                'proxyMode' => !(isset($payload['nativeWebMode'])
+                    && 'nginx-only' === $payload['nativeWebMode']),
                 'phpHandlerId' => $phpHandlerId,
             ),
             'php' => array(
@@ -1791,6 +1808,7 @@ class Modules_SkamasleOls_ControlCommand
             : (method_exists($domain, 'getSetting')
                 ? '1' === (string) $domain->getSetting('skamasle-ols.lscache', '0')
                 : false);
+        $nativeWebMode = $this->resolveNativeWebMode($domain, $existing, $name);
 
         $domain = array(
             'guid' => $guid,
@@ -1810,8 +1828,8 @@ class Modules_SkamasleOls_ControlCommand
                 ? (string) $domain->getSysGroupLogin()
                 : 'psacln',
             'nativeProfile' => array(
-                'webMode' => 'proxy',
-                'proxyMode' => true,
+                'webMode' => $nativeWebMode,
+                'proxyMode' => 'proxy' === $nativeWebMode,
                 'phpHandlerId' => $handlerId,
             ),
             'php' => array(
@@ -1874,6 +1892,93 @@ class Modules_SkamasleOls_ControlCommand
         throw new RuntimeException(
             'Unable to determine the PHP handler selected in Plesk.'
         );
+    }
+
+    private function resolveNativeWebMode($domain, $existing, $domainName)
+    {
+        if (method_exists($domain, 'getProperty')) {
+            try {
+                $mode = $this->nativeWebModeFromFlag(
+                    $domain->getProperty('nginxServePhp')
+                );
+                if (null !== $mode) {
+                    return $mode;
+                }
+            } catch (Throwable $exception) {
+                // Older Plesk builds do not expose this property directly.
+            }
+        }
+
+        $mode = $this->resolveNativeWebModeFromCli($domainName);
+        if (null !== $mode) {
+            return $mode;
+        }
+
+        if ($existing
+            && isset($existing['nativeProfile']['webMode'])
+            && in_array($existing['nativeProfile']['webMode'], array('proxy', 'nginx-only'), true)
+        ) {
+            return $existing['nativeProfile']['webMode'];
+        }
+
+        return 'proxy';
+    }
+
+    private function resolveNativeWebModeFromCli($domainName)
+    {
+        $pleskBinary = null;
+        foreach (array('/usr/sbin/plesk', '/usr/local/psa/admin/bin/plesk') as $plesk) {
+            if (is_executable($plesk)) {
+                $pleskBinary = $plesk;
+                break;
+            }
+        }
+        if (null === $pleskBinary) {
+            return null;
+        }
+
+        $sql = 'SELECT wsp.value '
+            . 'FROM domains d '
+            . 'JOIN dom_param dp ON dp.dom_id = d.id '
+            . 'JOIN WebServerSettingsParameters wsp ON wsp.webServerSettingsId = dp.val '
+            . 'WHERE dp.param = ' . $this->sqlLiteral('webServerSettingsId') . ' '
+            . 'AND d.name = ' . $this->sqlLiteral($domainName) . ' '
+            . 'AND wsp.name = ' . $this->sqlLiteral('nginxServePhp') . ' '
+            . 'LIMIT 1';
+        $dbCommand = escapeshellarg($pleskBinary)
+            . ' db -Ne ' . escapeshellarg($sql);
+        $dbOutput = array();
+        $dbExitCode = 1;
+        exec('LC_ALL=C ' . $dbCommand . ' 2>&1', $dbOutput, $dbExitCode);
+        $dbText = trim(implode("\n", $dbOutput));
+        $this->phpHandlerResolutionAttempts[] = array(
+            'command' => $dbCommand,
+            'exitCode' => (int) $dbExitCode,
+            'output' => substr($dbText, 0, 4000),
+            'purpose' => 'native-web-mode',
+        );
+        if (0 !== $dbExitCode || '' === $dbText) {
+            return null;
+        }
+
+        return $this->nativeWebModeFromFlag($dbText);
+    }
+
+    private function nativeWebModeFromFlag($value)
+    {
+        if (is_bool($value)) {
+            return $value ? 'nginx-only' : 'proxy';
+        }
+
+        $normalized = strtolower(trim((string) $value));
+        if ('true' === $normalized || '1' === $normalized || 'yes' === $normalized) {
+            return 'nginx-only';
+        }
+        if ('false' === $normalized || '0' === $normalized || 'no' === $normalized) {
+            return 'proxy';
+        }
+
+        return null;
     }
 
     private function resolvePhpHandlerIdFromCli($domainName)

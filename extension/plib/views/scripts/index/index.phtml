@@ -545,6 +545,10 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                             $routingLabel = 'ols' === $domain['requestedRouting'] ? 'OLS' : 'Native';
                             $cacheEnabled = !empty($domain['cacheEnabled']);
                             $cachePrivateEnabled = !empty($domain['cachePrivateEnabled']);
+                            $nativeWebMode = isset($domain['nativeWebMode'])
+                                ? $domain['nativeWebMode']
+                                : null;
+                            $nginxOnlyPhp = 'nginx-only' === $nativeWebMode;
                             $prepared = !empty($domain['prepared']);
                             $requestedRouting = isset($domain['requestedRouting'])
                                 ? $domain['requestedRouting']
@@ -751,20 +755,20 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                         <?php if (!$prepared): ?>
                                             <form method="post" action="<?php echo $escape($this->prepareDomainVhostUrl); ?>">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo (empty($engine['installed']) || $nginxOnlyPhp) ? 'disabled="disabled"' : ''; ?>>
                                                     Stage OLS vhost
                                                 </button>
                                             </form>
                                             <form method="post" action="<?php echo $escape($this->stageAndEnableDomainVhostUrl); ?>">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo (empty($engine['installed']) || $nginxOnlyPhp) ? 'disabled="disabled"' : ''; ?>>
                                                     Stage and enable OLS
                                                 </button>
                                             </form>
                                         <?php else: ?>
                                             <form method="post" action="<?php echo $escape($this->prepareDomainVhostUrl); ?>">
                                                 <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
-                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo empty($engine['installed']) ? 'disabled="disabled"' : ''; ?>>
+                                                <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo (empty($engine['installed']) || $nginxOnlyPhp) ? 'disabled="disabled"' : ''; ?>>
                                                     Rebuild OLS vhost
                                                 </button>
                                             </form>
@@ -780,7 +784,7 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                                 <form method="post" action="<?php echo $escape($this->setDomainRoutingUrl); ?>">
                                                     <input type="hidden" name="domain_guid" value="<?php echo $escape($domain['guid']); ?>">
                                                     <input type="hidden" name="routing" value="ols">
-                                                    <button type="submit" class="btn skamasle-ols-btn-primary">
+                                                    <button type="submit" class="btn skamasle-ols-btn-primary" <?php echo $nginxOnlyPhp ? 'disabled="disabled"' : ''; ?>>
                                                         Enable OLS
                                                     </button>
                                                 </form>
@@ -792,15 +796,21 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                                                 </form>
                                             <?php endif; ?>
                                         <?php endif; ?>
-                                        <span class="skamasle-ols-inline-note">
-                                            <?php
-                                            if ($domain['readiness']['acknowledgementRequired']) {
-                                                echo 'Future activation will require acknowledging compatibility warnings.';
-                                            } else {
-                                                echo 'WebAdmin edits are allowed, but rebuilding from Plesk overwrites the managed vhost.';
-                                            }
-                                            ?>
-                                        </span>
+                                        <?php if ($nginxOnlyPhp): ?>
+                                            <div class="skamasle-ols-alert skamasle-ols-alert--warning">
+                                                This domain is using nginx + PHP-FPM. Change it to nginx + Apache + PHP before enabling OLS.
+                                            </div>
+                                        <?php else: ?>
+                                            <span class="skamasle-ols-inline-note">
+                                                <?php
+                                                if ($domain['readiness']['acknowledgementRequired']) {
+                                                    echo 'Future activation will require acknowledging compatibility warnings.';
+                                                } else {
+                                                    echo 'WebAdmin edits are allowed, but rebuilding from Plesk overwrites the managed vhost.';
+                                                }
+                                                ?>
+                                            </span>
+                                        <?php endif; ?>
                                     </div>
                                 </td>
                             </tr>

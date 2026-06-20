@@ -141,6 +141,15 @@ class TestDomain
         return $this->documentRoot;
     }
 
+    public function getProperty($name)
+    {
+        if ('nginxServePhp' === $name) {
+            return 'site2.test' === $this->name ? 'true' : 'false';
+        }
+
+        throw new RuntimeException('Unknown property.');
+    }
+
     public function getSetting($key, $default = null)
     {
         if ('skamasle-ols.prepared' === $key) {
@@ -185,6 +194,11 @@ assertSameValue(
     0,
     $scanner->calls,
     'Inventory must not invoke the scanner during normal dashboard loading'
+);
+assertSameValue(
+    'nginx-only',
+    $all['items'][1]['nativeWebMode'],
+    'Inventory must expose the detected nginx-only PHP mode'
 );
 
 $filtered = $inventory->getSummary('site5', 1, 10);

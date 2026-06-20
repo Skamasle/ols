@@ -102,3 +102,24 @@ assertSameValue(
     $nginxDown['status'],
     'Nginx downtime must block activation'
 );
+
+$nginxOnly = $evaluator->evaluate(
+    array(
+        'hosting' => true,
+        'active' => true,
+        'suspended' => false,
+        'nativeWebMode' => 'nginx-only',
+    ),
+    $compatible,
+    $serverReady
+);
+assertSameValue(
+    'blocked',
+    $nginxOnly['status'],
+    'nginx-only PHP domains must be blocked'
+);
+assertSameValue(
+    true,
+    false !== strpos($nginxOnly['reasons'][0], 'nginx + PHP-FPM'),
+    'nginx-only block reason must explain the required switch'
+);

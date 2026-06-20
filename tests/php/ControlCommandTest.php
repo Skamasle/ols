@@ -375,6 +375,7 @@ class TestPleskDomain extends pm_Domain
     public static $settings = array();
     public static $phpHandlerId = 'plesk-php83-fpm';
     public static $guid = '{123e4567-e89b-42d3-a456-426614174000}';
+    public static $nginxServePhp = 'false';
 
     public function getGuid()
     {
@@ -421,6 +422,9 @@ class TestPleskDomain extends pm_Domain
         if ('php_handler_id' === $name) {
             return self::$phpHandlerId;
         }
+        if ('nginxServePhp' === $name) {
+            return self::$nginxServePhp;
+        }
         throw new RuntimeException('Unknown property.');
     }
 
@@ -453,6 +457,7 @@ if (false === $stateFile) {
 
 try {
     TestPleskDomain::$phpHandlerId = 'plesk-php83-fpm';
+    TestPleskDomain::$nginxServePhp = 'false';
     file_put_contents(
         $stateFile,
         json_encode(array(
@@ -690,6 +695,44 @@ try {
             && $routing['payload']['routingConfig']['configured'],
         'Routing config must be written alongside routing state'
     );
+    TestPleskDomain::$nginxServePhp = 'true';
+    $nginxOnlyPrepare = $command->run(array(
+        'prepare-domain-vhost',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+    ));
+    assertSameValue(
+        2,
+        $nginxOnlyPrepare['exitCode'],
+        'nginx-only PHP domains must not allow OLS vhost preparation'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($nginxOnlyPrepare['payload']['error'], 'nginx + PHP-FPM'),
+        'nginx-only preparation block must explain the required web mode change'
+    );
+    $nginxOnlyState = json_decode((string) file_get_contents($stateFile), true);
+    $nginxOnlyState['domains'][0]['nativeProfile']['webMode'] = 'nginx-only';
+    $nginxOnlyState['domains'][0]['nativeProfile']['proxyMode'] = false;
+    file_put_contents($stateFile, json_encode($nginxOnlyState));
+    $nginxOnlyRouting = $command->run(array(
+        'set-domain-routing',
+        '{123e4567-e89b-42d3-a456-426614174000}',
+        'ols',
+    ));
+    assertSameValue(
+        2,
+        $nginxOnlyRouting['exitCode'],
+        'nginx-only PHP domains must not allow OLS routing activation'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($nginxOnlyRouting['payload']['error'], 'nginx + PHP-FPM'),
+        'nginx-only routing block must explain the required web mode change'
+    );
+    $nginxOnlyState['domains'][0]['nativeProfile']['webMode'] = 'proxy';
+    $nginxOnlyState['domains'][0]['nativeProfile']['proxyMode'] = true;
+    file_put_contents($stateFile, json_encode($nginxOnlyState));
+    TestPleskDomain::$nginxServePhp = 'false';
     $domainLookupsBeforeCache = pm_Domain::$getAllCalls;
     $cache = $command->run(array(
         'set-domain-cache',

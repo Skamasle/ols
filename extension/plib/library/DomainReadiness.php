@@ -31,6 +31,9 @@ class Modules_SkamasleOls_DomainReadiness
         if (empty($server['nginx']['active'])) {
             $reasons[] = 'nginx must be active before OLS can be enabled.';
         }
+        if (isset($domain['nativeWebMode']) && 'nginx-only' === $domain['nativeWebMode']) {
+            $reasons[] = 'This domain is using nginx + PHP-FPM. Switch it to nginx + Apache + PHP before enabling OLS.';
+        }
 
         if (!empty($reasons)) {
             return array(
