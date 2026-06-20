@@ -3,6 +3,19 @@
 Build releases are generated incrementally. The release number identifies the
 exact ZIP artifact and does not replace earlier builds.
 
+## 0.1.1-4
+
+- Add optional private LSCache enablement per domain while keeping public
+  cache as the default activation path.
+- Persist and validate the per-domain private-cache flag in desired state and
+  vhost generation.
+- Detect domains that use nginx + PHP-FPM (`nginx-only`) from Plesk web server
+  settings.
+- Block OLS staging and activation for `nginx-only` domains and explain that
+  they must be switched to `nginx + Apache + PHP` first.
+- Surface the `nginx-only` warning directly in the domain table and disable
+  OLS action buttons for affected domains.
+
 ## 0.1.1-2
 
 - Make LSAPI use a single user-facing value and mirror it to both
