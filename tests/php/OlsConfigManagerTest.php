@@ -96,6 +96,11 @@ try {
         false !== strpos($serverConfig, 'respCookieCache     0'),
         'Server cache registration must reject responses that set cookies'
     );
+    assertSameValue(
+        true,
+        false !== strpos($serverConfig, 'qsCache             0'),
+        'Server cache registration must not cache query-string variants by default'
+    );
 
     $domain = array(
         'name' => 'example.test',
@@ -344,6 +349,11 @@ try {
         true,
         false !== strpos($vhconfContent, 'respCookieCache     0'),
         'Responses that set cookies must not enter public cache by default'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($vhconfContent, 'qsCache             0'),
+        'Vhost cache must not cache query-string variants by default'
     );
     $enabledVhost = $manager->writeVhostConfig($domain + array('cacheEnabled' => true));
     assertSameValue(true, $enabledVhost['available'], 'Vhost cache rewrite must succeed');
