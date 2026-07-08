@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	httpdocsDir  = "httpdocs"
-	htaccessFile = ".htaccess"
+	httpdocsDir      = "httpdocs"
+	htaccessFile     = ".htaccess"
+	maxHttpdocsDepth = 15
 )
 
 type Event struct {
@@ -95,7 +96,13 @@ func (w *Watcher) Rescan() error {
 		if err != nil || info == nil {
 			return nil
 		}
-		if !info.IsDir() || !w.isWatchedDir(path) {
+		if !info.IsDir() {
+			return nil
+		}
+		if w.isTooDeepWatchedDir(path) {
+			return filepath.SkipDir
+		}
+		if !w.isWatchedDir(path) {
 			return nil
 		}
 		return w.addDir(path)
@@ -212,9 +219,24 @@ func (w *Watcher) isWatchedDir(path string) bool {
 	if len(parts) == 1 {
 		return true
 	}
-	for _, part := range parts {
+	for index, part := range parts {
 		if part == httpdocsDir {
-			return true
+			return len(parts)-index-1 <= maxHttpdocsDepth
+		}
+	}
+	return false
+}
+
+func (w *Watcher) isTooDeepWatchedDir(path string) bool {
+	clean := filepath.Clean(path)
+	relative, err := filepath.Rel(w.root, clean)
+	if err != nil || strings.HasPrefix(relative, "..") {
+		return false
+	}
+	parts := strings.Split(relative, string(os.PathSeparator))
+	for index, part := range parts {
+		if part == httpdocsDir {
+			return len(parts)-index-1 > maxHttpdocsDepth
 		}
 	}
 	return false

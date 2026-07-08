@@ -32,6 +32,15 @@ func TestWatchedDirCheck(t *testing.T) {
 	if !w.isWatchedDir("/var/www/vhosts/example.test/httpdocs") {
 		t.Fatal("httpdocs directory must be watched")
 	}
+	if !w.isWatchedDir(deepPath("/var/www/vhosts/example.test/httpdocs", maxHttpdocsDepth)) {
+		t.Fatal("maximum supported httpdocs depth must be watched")
+	}
+	if w.isWatchedDir(deepPath("/var/www/vhosts/example.test/httpdocs", maxHttpdocsDepth+1)) {
+		t.Fatal("directories beyond the maximum httpdocs depth must not be watched")
+	}
+	if !w.isTooDeepWatchedDir(deepPath("/var/www/vhosts/example.test/httpdocs", maxHttpdocsDepth+1)) {
+		t.Fatal("rescan must prune directories beyond the maximum httpdocs depth")
+	}
 	if w.isWatchedDir("/var/www/vhosts/example.test/logs") {
 		t.Fatal("non-httpdocs directory must not be watched")
 	}
@@ -41,6 +50,14 @@ func TestWatchedDirCheck(t *testing.T) {
 	if !w.isWatchedDir("/var/www/vhosts/example.test") {
 		t.Fatal("vhost root must be watched for new httpdocs trees")
 	}
+}
+
+func deepPath(root string, depth int) string {
+	path := root
+	for i := 0; i < depth; i++ {
+		path = filepath.Join(path, "nested")
+	}
+	return path
 }
 
 func TestWatcherEmitsHtaccessEvent(t *testing.T) {
