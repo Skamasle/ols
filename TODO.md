@@ -29,7 +29,7 @@ Lista viva de pendientes técnicos y revisiones del módulo.
 - [ ] Completar health checks posteriores al reload; la validación previa de configuración ya existe.
 - [ ] Definir un rate limit de reloads por dominio o global para evitar bucles de reinicio, con una ventana inicial de referencia de 2 minutos.
 - [ ] Revisar el usuario/grupo con el que corre el daemon y endurecer permisos; el objetivo es salir de `root` si la capacidad de reload lo permite.
-- [ ] Limitar watchers por dominio o evitar el seguimiento de directorios demasiado profundos para reducir consumo de `inotify`.
+- [x] Limitar watchers por dominio o evitar el seguimiento de directorios demasiado profundos para reducir consumo de `inotify`.
 - [x] Unificar el watcher con el `skamasle-ols-agent` previsto.
 
 ## Calidad y mantenimiento
@@ -39,10 +39,10 @@ Lista viva de pendientes técnicos y revisiones del módulo.
 - [ ] Ampliar pruebas de ruta real de caché por dominio para variantes con `vhostRoot` explícito.
 - [ ] Revisar logs y diagnósticos para que los fallos de cache y daemon sean visibles.
 - [ ] Documentar claramente qué partes son prototipo y qué partes ya son aptas para uso controlado.
+- [ ] Verificar en OLS instalado hasta qué profundidad se aplican `.htaccess` de subdirectorios con `autoLoadHtaccess 1`.
 
 ## Creación pendiente
 
 - [ ] Diseñar el sistema de invalidación de caché por eventos de Plesk.
 - [ ] Diseñar el plan de reconciliación automática entre estado deseado y estado real de OLS.
-- [ ] Diseñar el empaquetado del agente independiente como entrega separada del ZIP del módulo, si aplica.
 - [ ] Diseñar el modo de instalación y desinstalación del agente sin dejar procesos huérfanos.
