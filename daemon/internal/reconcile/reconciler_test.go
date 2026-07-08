@@ -139,7 +139,7 @@ func TestDecideNoopForNativeDomain(t *testing.T) {
 	}
 }
 
-func TestDecideReloadsEvenWithReviewFindings(t *testing.T) {
+func TestDecideFlagsReviewFindings(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "desired-state.json")
 	writeState(t, statePath, olsState)
@@ -159,8 +159,36 @@ func TestDecideReloadsEvenWithReviewFindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if decision.Action != ActionReload {
-		t.Fatalf("expected reload, got %s", decision.Action)
+	if decision.Action != ActionReview {
+		t.Fatalf("expected review, got %s", decision.Action)
+	}
+	if decision.FindingCount != 1 {
+		t.Fatalf("expected one finding, got %d", decision.FindingCount)
+	}
+}
+
+func TestDecideFlagsBlockedFindings(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "desired-state.json")
+	writeState(t, statePath, olsState)
+
+	r := New(state.New(statePath), fakeScanner{
+		result: htaccessscan.Result{
+			Status:       "blocked",
+			FilesScanned: 1,
+			Findings: []htaccessscan.Finding{
+				{Directive: "document-root", Classification: "scan-error"},
+			},
+		},
+	})
+	decision, err := r.Decide(eventqueue.Event{
+		Path: "/var/www/vhosts/example.test/httpdocs/.htaccess",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if decision.Action != ActionBlocked {
+		t.Fatalf("expected blocked, got %s", decision.Action)
 	}
 	if decision.FindingCount != 1 {
 		t.Fatalf("expected one finding, got %d", decision.FindingCount)

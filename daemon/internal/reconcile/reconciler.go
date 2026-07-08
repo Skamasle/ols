@@ -94,12 +94,18 @@ func (r *Reconciler) Decide(event eventqueue.Event) (Decision, error) {
 	scan := r.scanner.Scan(domain.DocumentRoot)
 	filesScanned = scan.FilesScanned
 	findingCount = len(scan.Findings)
-	if "blocked" == scan.Status || "review" == scan.Status {
+	action := ActionReload
+	if "review" == scan.Status {
+		action = ActionReview
+		reason = scan.Summary() + "; reloading anyway and keeping findings for future deny-list tuning"
+	}
+	if "blocked" == scan.Status {
+		action = ActionBlocked
 		reason = scan.Summary() + "; reloading anyway and keeping findings for future deny-list tuning"
 	}
 
 	return Decision{
-		Action:       ActionReload,
+		Action:       action,
 		DomainName:   domain.Name,
 		DomainRoot:   root,
 		Reason:       reason,
