@@ -185,15 +185,16 @@ domain system user and group. Domain-specific names are optional for operator
 clarity, but they are not required for safety.
 
 nginx forwards `X-Real-IP` and `X-Forwarded-For` to the OLS backend, so
-applications can recover the client IP from request headers. OLS access logs use
-the backend connection context unless trusted-proxy logging is configured
-separately.
+applications can recover the client IP from request headers. OLS access logging
+is intentionally disabled by default. nginx/Plesk remains responsible for access
+logs and writes OLS-routed traffic to the Plesk proxy logs. This avoids changing
+ownership or permissions on Apache/Plesk-managed files such as `access_ssl_log`,
+which is part of the project's policy of not breaking Plesk-managed state.
 
 Per-vhost error logs are explicit and live under the standard Plesk domain log
-directory using an OLS-specific file name. OLS access logging is disabled by
-default. nginx keeps the canonical Plesk proxy access logs and panel
-statistics, explicitly writing OLS-routed requests to `proxy_access_ssl_log` or
-`proxy_access_log` depending on the public vhost. For example:
+directory using an OLS-specific file name. Access requests should be reviewed in
+the nginx/Plesk proxy logs, `proxy_access_ssl_log` or `proxy_access_log`
+depending on the public vhost. For example:
 
 ```text
 errorlog /var/www/vhosts/system/DOMINIO/logs/ols_error_log {

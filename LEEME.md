@@ -191,15 +191,16 @@ necesario para la seguridad.
 
 nginx reenvía `X-Real-IP` y `X-Forwarded-For` al backend OLS, así que las
 aplicaciones pueden recuperar la IP real desde las cabeceras de la petición.
-Los access logs de OLS usan el contexto de la conexión backend salvo que se
-configure aparte el logging con trusted proxy.
+El access log de OLS queda desactivado por defecto de forma intencionada.
+nginx/Plesk sigue siendo responsable de los logs de acceso y escribe el tráfico
+enrutado a OLS en los logs proxy de Plesk. Esto evita cambiar propietarios o
+permisos de ficheros gestionados por Apache/Plesk como `access_ssl_log`, dentro
+de la política del proyecto de no romper el estado gestionado por Plesk.
 
 Los logs de error por vhost se dejan explícitos y viven bajo el directorio
-estándar de logs del dominio con un nombre propio de OLS. El access log de OLS
-queda desactivado por defecto. nginx conserva los logs proxy canónicos de Plesk
-y las estadísticas del panel, escribiendo explícitamente las peticiones
-enrutadas a OLS en `proxy_access_ssl_log` o `proxy_access_log` según el vhost
-público. Por ejemplo:
+estándar de logs del dominio con un nombre propio de OLS. Las peticiones de
+acceso deben revisarse en los logs proxy de nginx/Plesk: `proxy_access_ssl_log`
+o `proxy_access_log` según el vhost público. Por ejemplo:
 
 ```text
 errorlog /var/www/vhosts/system/DOMINIO/logs/ols_error_log {
