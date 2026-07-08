@@ -288,6 +288,37 @@ try {
     assertSameValue(true, false !== strpos($vhconfContent, 'enableBr 0'), 'Brotli must default off');
     assertSameValue(
         true,
+        false !== strpos(
+            $vhconfContent,
+            'errorlog /var/www/vhosts/system/example.test/logs/error_log {'
+        ),
+        'Vhost errors must use the standard Plesk domain error log'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($vhconfContent, '  logLevel                ERROR'),
+        'Vhost error log must record errors only'
+    );
+    assertSameValue(
+        true,
+        false !== strpos(
+            $vhconfContent,
+            'accesslog /var/www/vhosts/system/example.test/logs/access_ssl_log {'
+        ),
+        'Vhost access logs must use the standard Plesk SSL access log'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($vhconfContent, '  keepDays                7'),
+        'Vhost access log retention must be configured'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($vhconfContent, '  compressArchive         1'),
+        'Vhost access log archives must be compressed'
+    );
+    assertSameValue(
+        true,
         false !== strpos($vhconfContent, 'module cache {'),
         'Vhost config must include the cache module block'
     );

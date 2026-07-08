@@ -4,71 +4,60 @@
 
 License: GNU General Public License v3.0. See [LICENSE](LICENSE).
 
-## Warning
+Skamasle OLS adds OpenLiteSpeed to Plesk as an optional backend per domain. It
+does not replace Apache, remove nginx, or edit Plesk-generated web
+configuration directly.
 
-Do not install this module in production.
+The intended path is:
 
-Plesk does not officially support OpenLiteSpeed:
-https://support.plesk.com/hc/en-us/articles/12377585683095-Does-Plesk-support-OpenLiteSpeed-Web-Server-or-LiteSpeed-installed-manually
+```text
+Plesk nginx :80/:443 -> OpenLiteSpeed on loopback -> LSPHP/LSAPI
+```
 
-OpenLiteSpeed does not support every Apache rule that may appear in `.htaccess`:
-https://docs.openlitespeed.org/config/rewriterules/
+Domains can stay on the native Plesk stack, or be routed to OLS when their PHP
+runtime and `.htaccess` rules are compatible.
 
-Again: do not install this module in production. The codebase was generated with AI after a human-authored project brief, and it should not be treated as production-ready until a human has reviewed 100% of the generated code. The current review status is below 7%.
+## Project Status
 
-Human testing may reduce the risk, but it does not make this safe. If you install it anyway, the risk is yours, not the module's. And if your plan is to use this as a substitute for a properly licensed LiteSpeed Enterprise deployment, that is exactly the wrong use case.
+This is an experimental module for lab and controlled testing environments. It
+is not production-ready yet.
 
-Development is being done on AlmaLinux 10.2 with the latest Plesk release available in the lab. More Plesk and OS versions still need to be tested before anyone should assume broad compatibility.
+Important limitations:
 
-OpenLiteSpeed integration for Plesk as an optional per-domain web backend,
-with support for installing the engine while still avoiding Apache replacement,
-nginx removal, or modification of files managed by Plesk.
+- Plesk does not officially support OpenLiteSpeed installed manually:
+  https://support.plesk.com/hc/en-us/articles/12377585683095-Does-Plesk-support-OpenLiteSpeed-Web-Server-or-LiteSpeed-installed-manually
+- OpenLiteSpeed does not support every Apache directive that can appear in
+  `.htaccess`: https://docs.openlitespeed.org/config/rewriterules/
+- The codebase still needs a complete security and operations review before
+  production use.
+- Current validation is focused on AlmaLinux 10.2 with a recent Plesk release.
+  Other Plesk and OS versions still need testing.
 
-The project is currently split into two cooperating but independent systems:
-
-- the Plesk extension in `extension/`;
-- an optional standalone agent for `.htaccess` and Plesk event reconciliation.
-
-The agent is not packaged in the extension ZIP yet. Both pieces can work
-together, but neither one depends on the other to exist at install time.
-
-Skamasle OLS is the product identity. Plesk is the first platform adapter;
-future adapters may target other hosting panels while sharing the state model,
-OLS renderer, compatibility scanner, and reconciliation engine.
-
-The goal is not to trick Plesk into believing that Apache is still running.
-Apache remains installed, active, and available to the domains that use it.
-OpenLiteSpeed is added as a third execution path for domains that can benefit
-from LSPHP/LSAPI.
+Use this as a development and evaluation project, not as a replacement for a
+properly licensed and supported LiteSpeed Enterprise deployment.
 
 ## What Exists Today
 
-This repository currently contains the Plesk extension and the supporting
-scripts it needs to inspect the server and prepare OpenLiteSpeed. The current
-state is intentionally conservative:
+The repository contains a Plesk extension and an optional standalone agent. The
+agent is not packaged in the extension ZIP yet.
 
-- it discovers the server capabilities and the installed PHP handlers;
-- it shows a domain inventory and the current routing state;
-- it validates whether a domain can move toward OLS;
-- it installs OpenLiteSpeed without replacing Apache or nginx;
-- it stores vhost configuration in the standard
+The extension can currently:
+
+- discover server capabilities and installed PHP handlers;
+- show domain inventory and routing state;
+- validate whether a domain can move toward OLS;
+- install OpenLiteSpeed without replacing Apache or nginx;
+- store vhost configuration in the standard
   `/usr/local/lsws/conf/vhosts/<domain>/vhconf.conf` layout;
-- it exposes per-domain LSAPI process, connection, backlog, timeout, and
-  buffering settings;
-- it keeps the native Plesk routing as the default fallback;
-- it stores the control-plane state needed for later activation work.
+- expose per-domain LSAPI process, connection, backlog, timeout, and buffering
+  settings;
+- keep native Plesk routing as the default fallback;
+- store control-plane state for activation and rollback.
 
-In practice, that means the extension is already useful as an inventory and
-preparation tool, but it is not yet a full migration system. The UI is built
-to surface what the platform can do now and what still needs operator review
-before a domain is routed to OLS.
+Manual changes in OpenLiteSpeed WebAdmin are possible, but the extension remains
+authoritative: rebuilding a domain vhost regenerates `vhconf.conf`.
 
-The standard vhost path keeps the generated virtual host visible and editable
-through OpenLiteSpeed WebAdmin. Manual WebAdmin changes are allowed, but the
-Plesk extension remains authoritative: rebuilding a domain vhost regenerates
-`vhconf.conf` and overwrites manual changes.
-
-## Generate the Extension
+## Build
 
 Build the Plesk extension ZIP from the repository root with:
 
@@ -83,33 +72,19 @@ the release number automatically. The resulting file follows this pattern:
 build/skamasle-ols-plesk-<version>-<release>.zip
 ```
 
-You can install the latest ZIP from `build/` with:
+Install the latest local build with:
 
 ```bash
 plesk bin extension -i "build/skamasle-ols-plesk-latest.zip"
 ```
 
-After building, validate the archive with:
+Validate the archive with:
 
 ```bash
 bash tests/package.sh
 ```
 
-That test checks the ZIP contents, confirms the module metadata, and makes
-sure no development files leaked into the package.
-
 ## Screenshots
-
-This is a good place to add annotated captures from Plesk once you have them.
-Suggested images:
-
-- the extension dashboard and capability summary;
-- the domain inventory view;
-- the domain readiness result for one compatible and one incompatible domain;
-- the OpenLiteSpeed installation action and its status result;
-- the native versus OLS routing state for a domain.
-
-Example layout:
 
 ![Extension dashboard](./screenshot/dashboard.png)
 ![Installed state](./screenshot/domain-installed.png)
@@ -149,51 +124,23 @@ that depend on such directives remain on their native Plesk mode.
 
 ## Why Apache Is Not Replaced
 
-Plesk manages Apache as part of its web stack. It expects its binaries, systemd
-units, modules, and configuration in specific locations. Plesk also validates
-and regenerates them during operations such as:
-
-- `plesk repair web`;
-- Plesk and operating system updates;
-- hosting and PHP version changes;
-- domain creation, suspension, and removal;
-- certificate renewal;
-- WordPress Toolkit operations.
-
-Moving Apache binaries, replacing its service, or installing wrappers that
-simulate Apache responses creates a fragile dependency on Plesk internals and
-the operating system package manager.
-
-This project follows one fundamental rule:
+Plesk owns Apache: binaries, services, modules, generated configuration,
+repairs, updates, certificates, WordPress Toolkit integration, and domain
+lifecycle events all expect Apache to remain real.
 
 > Apache remains intact and fully functional.
 
-Therefore:
-
-- `/usr/sbin/httpd` and `/usr/sbin/apache2` are not renamed;
-- `httpd.service` and `apache2.service` are not replaced or masked;
-- the extension never returns a fake `Syntax OK`;
-- Plesk-generated configuration is not edited directly;
-- `plesk repair web` can continue validating and rebuilding the native stack.
-
-If OpenLiteSpeed becomes unavailable or an update is incompatible, each
-affected domain returns to its native Plesk mode.
+The extension does not rename Apache binaries, replace services, fake
+`Syntax OK`, or edit Plesk-generated Apache configuration. If OpenLiteSpeed
+becomes unavailable, affected domains can return to their native Plesk mode.
 
 ## Why nginx Remains the Orchestrator
 
-Plesk already uses nginx as its frontend and generates per-domain
-configuration for it. Keeping nginx on public ports `80` and `443` preserves:
+Plesk already uses nginx as the public frontend. Keeping nginx on ports `80`
+and `443` preserves TLS, certificates, IP bindings, redirects, panel logging,
+WordPress Toolkit behavior, and regeneration through official Plesk tools.
 
-- TLS termination;
-- certificates and ACME renewals;
-- Plesk-managed IP addresses and bindings;
-- Plesk-generated redirects and headers;
-- WordPress Toolkit integration;
-- normal panel logging and operations;
-- regeneration through official Plesk tools.
-
-OpenLiteSpeed does not listen directly on `80` or `443`. It runs as a backend
-on a private loopback listener:
+OpenLiteSpeed runs behind nginx on a private loopback listener:
 
 ```text
 Internet
@@ -208,13 +155,7 @@ Plesk-managed nginx :80/:443
    `--> OpenLiteSpeed on loopback --> LSPHP/LSAPI
 ```
 
-nginx selects the backend for each domain from the configuration generated by
-Plesk and the routing requested through the extension.
-
-This limits the integration impact: nginx remains the real frontend and Apache
-remains a real service from Plesk's perspective. The extension changes the
-upstream only for domains explicitly enabled for OLS, using supported extension
-points.
+The extension changes the upstream only for domains explicitly enabled for OLS.
 
 ## Why OLS Is Used Only With LSAPI/LSPHP
 
@@ -222,41 +163,19 @@ OpenLiteSpeed alone does not provide enough benefit if PHP continues to run
 through PHP-FPM. Plesk already provides nginx-only with PHP-FPM, so adding
 another web server in that path would mostly add complexity.
 
-This project therefore does not implement `OLS + PHP-FPM`.
-
-An OLS domain uses:
+This project therefore does not implement `OLS + PHP-FPM`. An OLS domain uses:
 
 - its own LSPHP external application;
 - an exclusive LSAPI socket;
 - the domain system user and group;
-- PHP SuEXEC ProcessGroup;
-- Detached Mode;
 - process, memory, and timeout limits;
 - per-domain generated PHP configuration.
 
-Before routing traffic, the extension must verify:
-
-- `/opt/plesk/php/<version>/bin/lsphp` exists for the PHP version selected in
-  Plesk;
-- the binary identifies itself as a LiteSpeed/LSAPI build;
-- the required PHP extensions are available;
-- relevant PHP settings can be reproduced;
-- the process runs as the expected user;
-- static and PHP health checks pass.
-
-PHP processes or sockets are never shared globally across subscriptions.
-
-The Plesk-provided `lsphp` binary is the preferred and supported runtime. The
-extension does not install a parallel `lsphpXX` package by default. Plesk
-therefore remains responsible for PHP versions, security updates, extensions,
-and the base `php.ini`. File presence alone is not enough: LSAPI operation,
-version, modules, loaded INI files, and socket execution are verified before
-activation.
-
-The current environment confirms that the Plesk PHP branches already ship with
-an executable `lsphp` binary in `/opt/plesk/php/<version>/bin/lsphp`. That
-means the integration should reuse the Plesk-managed runtime rather than
-provisioning a separate LiteSpeed PHP tree.
+The preferred runtime is Plesk's own
+`/opt/plesk/php/<version>/bin/lsphp`. The extension does not install a parallel
+LiteSpeed PHP tree by default, and it verifies LSAPI behavior, PHP parity,
+loaded modules, socket execution, and basic health checks before activation.
+PHP processes and sockets are never shared globally across subscriptions.
 
 The `extProcessor lsphp` and `scriptHandler add lsapi:lsphp php` names are
 rendered inside each vhost config. In practice that makes them vhost-local, so
@@ -265,24 +184,22 @@ The real isolation boundary is the vhost config, the socket path, and the
 domain system user and group. Domain-specific names are optional for operator
 clarity, but they are not required for safety.
 
-nginx already forwards `X-Real-IP` and `X-Forwarded-For` to the OLS backend.
-That is enough for application code to recover the client IP from the request
-headers. If we want OLS access logs to show the client IP directly, we still
-need to define the exact OLS logging or trusted-proxy behavior; that part is
-not modeled yet.
+nginx forwards `X-Real-IP` and `X-Forwarded-For` to the OLS backend, so
+applications can recover the client IP from request headers. OLS access logs use
+the backend connection context unless trusted-proxy logging is configured
+separately.
 
-Per-vhost logs should also be explicit. The current design should document and
-eventually emit domain-scoped log files under
+Per-vhost logs are explicit and reuse the standard Plesk domain log files under
 `/var/www/vhosts/system/<domain>/logs/`, for example:
 
 ```text
-errorlog /var/www/vhosts/DOMINIO/logs/ols-error.log {
+errorlog /var/www/vhosts/system/DOMINIO/logs/error_log {
   useServer               0
   logLevel                ERROR
   rollingSize             100M
 }
 
-accesslog /var/www/vhosts/DOMINIO/logs/ols-access-ssl.log {
+accesslog /var/www/vhosts/system/DOMINIO/logs/access_ssl_log {
   useServer               0
   rollingSize             200M
   keepDays                7
@@ -290,7 +207,7 @@ accesslog /var/www/vhosts/DOMINIO/logs/ols-access-ssl.log {
 }
 ```
 
-Those paths are still a pending configuration decision in the module.
+Those paths are rendered in each managed OLS vhost config.
 
 The private OLS listener also needs TLS to work with `secure 1`. The current
 strategy is to generate a global self-signed certificate after OLS is

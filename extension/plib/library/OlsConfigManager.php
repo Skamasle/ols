@@ -128,6 +128,25 @@ class Modules_SkamasleOls_OlsConfigManager
         return $this->getDomainRootPath($domain) . '/lscache';
     }
 
+    public function getDomainLogDirectory(array $domain)
+    {
+        $name = isset($domain['name'])
+            ? $this->sanitizeDomainName($domain['name'])
+            : 'unknown.local';
+
+        return '/var/www/vhosts/system/' . $name . '/logs';
+    }
+
+    public function getDomainErrorLogPath(array $domain)
+    {
+        return $this->getDomainLogDirectory($domain) . '/error_log';
+    }
+
+    public function getDomainAccessLogPath(array $domain)
+    {
+        return $this->getDomainLogDirectory($domain) . '/access_ssl_log';
+    }
+
     public function getLogPath()
     {
         return $this->stateRoot . '/logs/ols-debug.log';
@@ -930,6 +949,8 @@ class Modules_SkamasleOls_OlsConfigManager
             ? rtrim((string) $domain['phpIniDir'], '/')
             : '/var/www/vhosts/system/' . $name . '/etc';
         $cachePath = $this->getCachePath($domain);
+        $errorLogPath = $this->getDomainErrorLogPath($domain);
+        $accessLogPath = $this->getDomainAccessLogPath($domain);
         $socketAddress = 'uds://' . ltrim($socket, '/');
         $cacheEnabled = !empty($domain['cacheEnabled']);
         $cachePrivateEnabled = $cacheEnabled
@@ -956,6 +977,19 @@ class Modules_SkamasleOls_OlsConfigManager
             ))),
             'enableGzip 0',
             'enableBr 0',
+            '',
+            'errorlog ' . $errorLogPath . ' {',
+            '  useServer               0',
+            '  logLevel                ERROR',
+            '  rollingSize             100M',
+            '}',
+            '',
+            'accesslog ' . $accessLogPath . ' {',
+            '  useServer               0',
+            '  rollingSize             200M',
+            '  keepDays                7',
+            '  compressArchive         1',
+            '}',
             '',
             'index {',
             '  useServer 0',

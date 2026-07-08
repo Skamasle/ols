@@ -16,7 +16,7 @@ Lista viva de pendientes técnicos y revisiones del módulo.
 - [ ] Revisar qué datos exactos conviene persistir desde `plesk bin site --info` para la detección ya funcional de cambios de dominio, hosting y PHP.
 - [ ] Confirmar el comportamiento con dominios que usan PHP-FPM, modo proxy y cambios de plantilla.
 - [ ] Revisar el flujo de preparación del dominio para reducir dependencias de reconstrucción manual.
-- [ ] Definir y documentar los logs de cada vhost en `/var/www/vhosts/system/<dominio>/logs/`, por ejemplo `errorlog /var/www/vhosts/DOMINIO/logs/ols-error.log` y `accesslog /var/www/vhosts/DOMINIO/logs/ols-access-ssl.log`.
+- [x] Definir los logs de cada vhost en las rutas estándar de Plesk: `/var/www/vhosts/system/<dominio>/logs/error_log` y `/var/www/vhosts/system/<dominio>/logs/access_ssl_log`.
 - [ ] Revisar si el certificado global temporal de OLS puede reutilizar el SSL de nginx o si debe mantenerse como trust anchor interno en `/usr/local/lsws/conf/ssl/`.
 
 ## Daemon y automatización
