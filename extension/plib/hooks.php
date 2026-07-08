@@ -39,6 +39,7 @@ class Modules_SkamasleOls_WebServer extends pm_Hook_WebServer
             '    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
             '    proxy_set_header X-Forwarded-Proto $scheme;',
             '    proxy_set_header X-Forwarded-Host $host;',
+            '    access_log /var/www/vhosts/system/' . $domainName . '/logs/proxy_access_ssl_log;',
             '}',
             '# END SKAMASLE OLS',
             '',

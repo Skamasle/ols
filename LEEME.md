@@ -194,25 +194,24 @@ aplicaciones pueden recuperar la IP real desde las cabeceras de la petición.
 Los access logs de OLS usan el contexto de la conexión backend salvo que se
 configure aparte el logging con trusted proxy.
 
-Los logs por vhost se dejan explícitos y reutilizan los ficheros estándar de
-Plesk bajo `/var/www/vhosts/system/<dominio>/logs/`, por ejemplo:
+Los logs de error por vhost se dejan explícitos y viven bajo el directorio
+estándar de logs del dominio con un nombre propio de OLS. El access log de OLS
+queda desactivado por defecto. nginx conserva los logs proxy canónicos de Plesk
+y las estadísticas del panel, escribiendo explícitamente las peticiones
+enrutadas a OLS en `proxy_access_ssl_log` o `proxy_access_log` según el vhost
+público. Por ejemplo:
 
 ```text
-errorlog /var/www/vhosts/system/DOMINIO/logs/error_log {
+errorlog /var/www/vhosts/system/DOMINIO/logs/ols_error_log {
   useServer               0
   logLevel                ERROR
   rollingSize             100M
 }
 
-accesslog /var/www/vhosts/system/DOMINIO/logs/access_ssl_log {
-  useServer               0
-  rollingSize             200M
-  keepDays                7
-  compressArchive         1
-}
 ```
 
-Estas rutas quedan renderizadas por el módulo en cada configuración de vhost OLS.
+Esa ruta de error queda renderizada por el módulo en cada configuración de vhost
+OLS.
 
 El listener privado de OLS también necesita TLS para funcionar con `secure 1`.
 La estrategia actual es generar un certificado auto-firmado global después de

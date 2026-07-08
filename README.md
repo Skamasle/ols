@@ -189,25 +189,22 @@ applications can recover the client IP from request headers. OLS access logs use
 the backend connection context unless trusted-proxy logging is configured
 separately.
 
-Per-vhost logs are explicit and reuse the standard Plesk domain log files under
-`/var/www/vhosts/system/<domain>/logs/`, for example:
+Per-vhost error logs are explicit and live under the standard Plesk domain log
+directory using an OLS-specific file name. OLS access logging is disabled by
+default. nginx keeps the canonical Plesk proxy access logs and panel
+statistics, explicitly writing OLS-routed requests to `proxy_access_ssl_log` or
+`proxy_access_log` depending on the public vhost. For example:
 
 ```text
-errorlog /var/www/vhosts/system/DOMINIO/logs/error_log {
+errorlog /var/www/vhosts/system/DOMINIO/logs/ols_error_log {
   useServer               0
   logLevel                ERROR
   rollingSize             100M
 }
 
-accesslog /var/www/vhosts/system/DOMINIO/logs/access_ssl_log {
-  useServer               0
-  rollingSize             200M
-  keepDays                7
-  compressArchive         1
-}
 ```
 
-Those paths are rendered in each managed OLS vhost config.
+That error log path is rendered in each managed OLS vhost config.
 
 The private OLS listener also needs TLS to work with `secure 1`. The current
 strategy is to generate a global self-signed certificate after OLS is

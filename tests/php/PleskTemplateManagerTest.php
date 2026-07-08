@@ -45,6 +45,16 @@ assertSameValue(
     false !== strpos($bundledTemplate, 'proxy_pass <?= $skamasleProxyTarget ?>;'),
     'Bundled template must emit one resolved proxy_pass target'
 );
+assertSameValue(
+    false,
+    false !== strpos($bundledTemplate, 'access_log off;'),
+    'Bundled template must leave nginx access logging enabled for Plesk statistics'
+);
+assertSameValue(
+    true,
+    false !== strpos($bundledTemplate, "access_log \"/var/www/vhosts/system/<?= \$VAR->domain->asciiName ?>/logs/<?= \$OPT['ssl'] ? 'proxy_access_ssl_log' : 'proxy_access_log' ?>\";"),
+    'Bundled template must route OLS nginx access logs to Plesk proxy logs'
+);
 
 $root = sys_get_temp_dir() . '/skamasle-ols-template-' . bin2hex(random_bytes(6));
 $sourceRoot = $root . '/templates/custom';

@@ -290,9 +290,9 @@ try {
         true,
         false !== strpos(
             $vhconfContent,
-            'errorlog /var/www/vhosts/system/example.test/logs/error_log {'
+            'errorlog /var/www/vhosts/system/example.test/logs/ols_error_log {'
         ),
-        'Vhost errors must use the standard Plesk domain error log'
+        'Vhost errors must use an OLS-specific domain error log'
     );
     assertSameValue(
         true,
@@ -300,22 +300,24 @@ try {
         'Vhost error log must record errors only'
     );
     assertSameValue(
-        true,
-        false !== strpos(
-            $vhconfContent,
-            'accesslog /var/www/vhosts/system/example.test/logs/access_ssl_log {'
-        ),
-        'Vhost access logs must use the standard Plesk SSL access log'
+        false,
+        false !== strpos($vhconfContent, 'accesslog '),
+        'Vhost must leave OLS access logging disabled by default'
     );
     assertSameValue(
-        true,
+        false,
+        false !== strpos($vhconfContent, 'access_ssl_log'),
+        'Vhost must not write directly to Plesk access logs'
+    );
+    assertSameValue(
+        false,
         false !== strpos($vhconfContent, '  keepDays                7'),
-        'Vhost access log retention must be configured'
+        'Vhost access log retention must remain managed by Plesk'
     );
     assertSameValue(
-        true,
+        false,
         false !== strpos($vhconfContent, '  compressArchive         1'),
-        'Vhost access log archives must be compressed'
+        'Vhost access log compression must remain managed by Plesk'
     );
     assertSameValue(
         true,

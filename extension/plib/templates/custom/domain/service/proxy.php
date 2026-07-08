@@ -67,7 +67,9 @@ if ($skamasleOlsEnabled) {
 <?php if (!$VAR->domain->physicalHosting->proxySettings['nginxTransparentMode'] && !$VAR->domain->physicalHosting->proxySettings['nginxServeStatic']): ?>
         proxy_set_header X-Accel-Internal /internal-nginx-static-location;
 <?php endif ?>
-        access_log off;
+<?php if ($skamasleOlsEnabled): ?>
+        access_log "/var/www/vhosts/system/<?= $VAR->domain->asciiName ?>/logs/<?= $OPT['ssl'] ? 'proxy_access_ssl_log' : 'proxy_access_log' ?>";
+<?php endif ?>
 
 <?php if ($OPT['nginxCacheEnabled'] ?? true): ?>
     <?=$VAR->includeTemplate('domain/service/nginxCacheProxy.php', $OPT)?>

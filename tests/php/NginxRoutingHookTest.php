@@ -77,6 +77,14 @@ assertSameValue(
     false !== strpos($config, 'location @skamasle_ols'),
     'nginx hook must use a named location'
 );
+assertSameValue(
+    true,
+    false !== strpos(
+        $config,
+        'access_log /var/www/vhosts/system/example.test/logs/proxy_access_ssl_log;'
+    ),
+    'nginx hook must route OLS access logs to the Plesk SSL proxy log'
+);
 
 TestPleskDomain::$settings['skamasle-ols.routing'] = 'native';
 assertSameValue(

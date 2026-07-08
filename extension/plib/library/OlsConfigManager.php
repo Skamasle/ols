@@ -139,12 +139,7 @@ class Modules_SkamasleOls_OlsConfigManager
 
     public function getDomainErrorLogPath(array $domain)
     {
-        return $this->getDomainLogDirectory($domain) . '/error_log';
-    }
-
-    public function getDomainAccessLogPath(array $domain)
-    {
-        return $this->getDomainLogDirectory($domain) . '/access_ssl_log';
+        return $this->getDomainLogDirectory($domain) . '/ols_error_log';
     }
 
     public function getLogPath()
@@ -950,7 +945,6 @@ class Modules_SkamasleOls_OlsConfigManager
             : '/var/www/vhosts/system/' . $name . '/etc';
         $cachePath = $this->getCachePath($domain);
         $errorLogPath = $this->getDomainErrorLogPath($domain);
-        $accessLogPath = $this->getDomainAccessLogPath($domain);
         $socketAddress = 'uds://' . ltrim($socket, '/');
         $cacheEnabled = !empty($domain['cacheEnabled']);
         $cachePrivateEnabled = $cacheEnabled
@@ -982,13 +976,6 @@ class Modules_SkamasleOls_OlsConfigManager
             '  useServer               0',
             '  logLevel                ERROR',
             '  rollingSize             100M',
-            '}',
-            '',
-            'accesslog ' . $accessLogPath . ' {',
-            '  useServer               0',
-            '  rollingSize             200M',
-            '  keepDays                7',
-            '  compressArchive         1',
             '}',
             '',
             'index {',
