@@ -210,6 +210,13 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
 
                 <div class="skamasle-ols-field">
                     <span class="skamasle-ols-label">OpenLiteSpeed provisioning</span>
+                    <div class="skamasle-ols-alert skamasle-ols-alert--warning">
+                        For the strongest supply-chain control, install OpenLiteSpeed or
+                        configure its signed repository as the server administrator first,
+                        then select one of the preferred options below. Automated bootstrap
+                        and custom repository modes trust the external source selected by
+                        the administrator and run package operations with root privileges.
+                    </div>
                     <form method="post" action="<?php echo $escape($this->installEngineUrl); ?>" class="skamasle-ols-field">
                         <select class="skamasle-ols-input" name="install_mode">
                             <?php foreach ($installModeOptions as $modeValue => $modeLabel): ?>
@@ -232,7 +239,10 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                 </div>
 
                 <div class="skamasle-ols-helper">
-                    <code>Recommended bootstrap</code> follows the vendor bootstrap path:
+                    <code>OpenLiteSpeed already installed</code> is the preferred option and
+                    only applies the module integration. <code>Repository already configured</code>
+                    is also preferred when the administrator has already verified and enabled
+                    the repository. <code>Automated vendor bootstrap</code> follows the vendor path:
                     <a href="https://docs.openlitespeed.org/installation/repo/" target="_blank" rel="noopener noreferrer">
                         OpenLiteSpeed repository bootstrap
                     </a>.
@@ -240,9 +250,10 @@ $buildDomainUrl = static function (array $params) use ($indexUrl) {
                     <a href="https://docs.openlitespeed.org/installation/" target="_blank" rel="noopener noreferrer">
                         the OpenLiteSpeed installation guide
                     </a>.
-                    <code>Custom repository URL</code> writes a repo file from the URL you provide.
-                    <code>Repository already configured</code> skips repo setup and only installs the package.
-                    <code>OpenLiteSpeed already installed</code> skips package installation and only applies module integration.
+                    <code>Custom repository URL</code> writes a repo file from the URL supplied
+                    by the administrator. These automated alternatives remain available for
+                    controlled environments, but repository authenticity and trust are the
+                    administrator's responsibility.
                 </div>
 
                 <div class="skamasle-ols-field">

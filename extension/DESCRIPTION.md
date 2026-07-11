@@ -7,6 +7,11 @@ Version 0.1 reports server capabilities and domain inventory and can install
 OpenLiteSpeed without changing Apache, nginx, PHP, or domain routing. It also
 validates an empty, native-only desired-state model used by later releases.
 
+For stronger supply-chain control, installing OpenLiteSpeed or configuring and
+verifying its repository as the server administrator is recommended before
+using the module integration. Automated provisioning remains an explicit
+administrator-controlled option for test and controlled environments.
+
 The target routing modes are:
 
 - Plesk native: nginx to Apache and the Plesk PHP handler.

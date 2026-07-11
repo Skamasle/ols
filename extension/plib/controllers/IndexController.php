@@ -1045,10 +1045,10 @@ class IndexController extends pm_Controller_Action
     private function installModeOptions()
     {
         return array(
-            'recommended-bootstrap' => 'Recommended bootstrap',
-            'custom-repo-url' => 'Custom repository URL',
-            'repo-ready' => 'Repository already configured',
-            'already-installed' => 'OpenLiteSpeed already installed',
+            'recommended-bootstrap' => 'Automated vendor bootstrap (admin opt-in)',
+            'custom-repo-url' => 'Custom repository URL (admin managed)',
+            'repo-ready' => 'Repository already configured (preferred)',
+            'already-installed' => 'OpenLiteSpeed already installed (preferred)',
         );
     }
 
