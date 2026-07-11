@@ -1,0 +1,114 @@
+[
+  {
+    "name": "valid-complete-domain",
+    "valid": true,
+    "state": {
+      "schemaVersion": 1,
+      "generation": 2,
+      "server": {
+        "defaultRouting": "native",
+        "listener": {"bindAddress": "127.0.0.1", "port": 7088, "protocol": "http"}
+      },
+      "domains": [{
+        "guid": "{123e4567-e89b-42d3-a456-426614174000}",
+        "pleskId": 12,
+        "name": "example.test",
+        "aliases": ["www.example.test"],
+        "documentRoot": "/var/www/vhosts/example.test/httpdocs",
+        "vhostRoot": "/var/www/vhosts/example.test",
+        "systemUser": "example",
+        "systemGroup": "psacln",
+        "nativeProfile": {"webMode": "proxy", "proxyMode": true, "phpHandlerId": "plesk-php83-fpm"},
+        "php": {
+          "pleskHandlerId": "plesk-php83-fpm",
+          "version": "8.3",
+          "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp",
+          "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock",
+          "lsapi": {
+            "maxConnections": 8,
+            "children": 8,
+            "instances": 1,
+            "backlog": 100,
+            "initTimeout": 60,
+            "retryTimeout": 0,
+            "persistentConnection": true,
+            "responseBuffering": false
+          }
+        },
+        "cacheEnabled": true,
+        "cachePrivateEnabled": true,
+        "requestedRouting": "ols",
+        "appliedRouting": "ols"
+      }]
+    }
+  },
+  {
+    "name": "invalid-uppercase-domain",
+    "valid": false,
+    "state": {
+      "schemaVersion": 1,
+      "generation": 0,
+      "server": {"defaultRouting": "native", "listener": {"bindAddress": "127.0.0.1", "port": 7088, "protocol": "http"}},
+      "domains": [{
+        "guid": "{123e4567-e89b-42d3-a456-426614174000}", "pleskId": 12, "name": "Example.test", "aliases": [],
+        "documentRoot": "/var/www/vhosts/example.test/httpdocs", "vhostRoot": "/var/www/vhosts/example.test",
+        "systemUser": "example", "systemGroup": "psacln",
+        "nativeProfile": {"webMode": "proxy", "proxyMode": true, "phpHandlerId": "plesk-php83-fpm"},
+        "php": {"pleskHandlerId": "plesk-php83-fpm", "version": "8.3", "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp", "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"},
+        "requestedRouting": "native", "appliedRouting": "native"
+      }]
+    }
+  },
+  {
+    "name": "invalid-guid-socket",
+    "valid": false,
+    "state": {
+      "schemaVersion": 1,
+      "generation": 0,
+      "server": {"defaultRouting": "native", "listener": {"bindAddress": "127.0.0.1", "port": 7088, "protocol": "http"}},
+      "domains": [{
+        "guid": "{123e4567-e89b-42d3-a456-426614174000}", "pleskId": 12, "name": "example.test", "aliases": [],
+        "documentRoot": "/var/www/vhosts/example.test/httpdocs", "vhostRoot": "/var/www/vhosts/example.test",
+        "systemUser": "example", "systemGroup": "psacln",
+        "nativeProfile": {"webMode": "proxy", "proxyMode": true, "phpHandlerId": "plesk-php83-fpm"},
+        "php": {"pleskHandlerId": "plesk-php83-fpm", "version": "8.3", "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp", "socket": "/tmp/wrong.sock"},
+        "requestedRouting": "native", "appliedRouting": "native"
+      }]
+    }
+  },
+  {
+    "name": "invalid-private-cache-without-cache",
+    "valid": false,
+    "state": {
+      "schemaVersion": 1,
+      "generation": 0,
+      "server": {"defaultRouting": "native", "listener": {"bindAddress": "127.0.0.1", "port": 7088, "protocol": "http"}},
+      "domains": [{
+        "guid": "{123e4567-e89b-42d3-a456-426614174000}", "pleskId": 12, "name": "example.test", "aliases": [],
+        "documentRoot": "/var/www/vhosts/example.test/httpdocs", "vhostRoot": "/var/www/vhosts/example.test",
+        "systemUser": "example", "systemGroup": "psacln",
+        "nativeProfile": {"webMode": "proxy", "proxyMode": true, "phpHandlerId": "plesk-php83-fpm"},
+        "php": {"pleskHandlerId": "plesk-php83-fpm", "version": "8.3", "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp", "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"},
+        "cacheEnabled": false, "cachePrivateEnabled": true,
+        "requestedRouting": "native", "appliedRouting": "native"
+      }]
+    }
+  },
+  {
+    "name": "invalid-document-root-outside-vhost",
+    "valid": false,
+    "state": {
+      "schemaVersion": 1,
+      "generation": 0,
+      "server": {"defaultRouting": "native", "listener": {"bindAddress": "127.0.0.1", "port": 7088, "protocol": "http"}},
+      "domains": [{
+        "guid": "{123e4567-e89b-42d3-a456-426614174000}", "pleskId": 12, "name": "example.test", "aliases": [],
+        "documentRoot": "/var/www/vhosts/other.test/httpdocs", "vhostRoot": "/var/www/vhosts/example.test",
+        "systemUser": "example", "systemGroup": "psacln",
+        "nativeProfile": {"webMode": "proxy", "proxyMode": true, "phpHandlerId": "plesk-php83-fpm"},
+        "php": {"pleskHandlerId": "plesk-php83-fpm", "version": "8.3", "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp", "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"},
+        "requestedRouting": "native", "appliedRouting": "native"
+      }]
+    }
+  }
+]

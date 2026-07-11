@@ -79,6 +79,22 @@
     "domain": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "cachePrivateEnabled": {"const": true}
+            },
+            "required": ["cachePrivateEnabled"]
+          },
+          "then": {
+            "properties": {
+              "cacheEnabled": {"const": true}
+            },
+            "required": ["cacheEnabled"]
+          }
+        }
+      ],
       "required": [
         "guid",
         "pleskId",
@@ -131,6 +147,13 @@
         "nativeProfile": {
           "type": "object",
           "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {"properties": {"webMode": {"const": "proxy"}}},
+              "then": {"properties": {"proxyMode": {"const": true}}},
+              "else": {"properties": {"proxyMode": {"const": false}}}
+            }
+          ],
           "required": [
             "webMode",
             "proxyMode",

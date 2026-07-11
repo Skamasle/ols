@@ -184,7 +184,7 @@ class Modules_SkamasleOls_DesiredStateValidator
             $domain['documentRoot'],
             $path . '.documentRoot'
         );
-        if (isset($domain['vhostRoot'])) {
+        if (array_key_exists('vhostRoot', $domain)) {
             $this->validateAbsolutePath(
                 $domain['vhostRoot'],
                 $path . '.vhostRoot'
@@ -318,7 +318,7 @@ class Modules_SkamasleOls_DesiredStateValidator
             );
         }
 
-        if (isset($php['lsapi'])) {
+        if (array_key_exists('lsapi', $php)) {
             $this->validateLsapi($php['lsapi'], $path . '.php.lsapi');
         }
     }

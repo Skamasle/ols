@@ -54,6 +54,14 @@ La extensión puede actualmente:
 - mantener el routing nativo de Plesk como fallback;
 - guardar estado de control para activación y reversión.
 
+Para obtener el mayor control sobre la cadena de suministro, OpenLiteSpeed
+debería ser instalado previamente por el administrador del servidor. La
+siguiente opción preferente es utilizar un repositorio que el administrador ya
+haya configurado y verificado. Los modos automáticos de bootstrap del proveedor
+y repositorio personalizado siguen disponibles para entornos controlados, pero
+ejecutan operaciones de paquetes como root y confían en la fuente externa
+seleccionada por el administrador.
+
 Los cambios manuales desde OpenLiteSpeed WebAdmin son posibles, pero la
 extensión sigue siendo autoritativa: al reconstruir un vhost se regenera
 `vhconf.conf`.
@@ -355,11 +363,22 @@ OpenLiteSpeed
 La instalación de la extensión no cambia automáticamente el web stack ni activa
 dominios en OLS.
 
+La postura de seguridad recomendada consiste en instalar OpenLiteSpeed
+manualmente como administrador del servidor, verificar sus paquetes y claves de
+repositorio conforme a la política del sistema operativo y seleccionar después
+`OpenLiteSpeed already installed` en la extensión. Si se delega la instalación
+de paquetes a la extensión, es preferible usar `Repository already configured`
+después de que el administrador haya verificado el repositorio. El bootstrap
+automático y el repositorio personalizado son decisiones explícitas del
+administrador y transfieren la confianza a la fuente externa configurada.
+
 El flujo de incorporación es:
 
 1. comprobar sistema operativo, Plesk, estado del servicio nginx, Apache y
    capacidades disponibles;
-2. instalar OpenLiteSpeed y validar los binarios `lsphp` incluidos por Plesk;
+2. verificar la instalación de OpenLiteSpeed realizada por el administrador, o
+   elegir explícitamente un modo de aprovisionamiento automático, y validar los
+   binarios `lsphp` incluidos por Plesk;
 3. configurar el listener OLS privado;
 4. inventariar dominios y sus configuraciones PHP;
 5. analizar compatibilidad y preparar cada virtual host;

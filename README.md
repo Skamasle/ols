@@ -54,6 +54,13 @@ The extension can currently:
 - keep native Plesk routing as the default fallback;
 - store control-plane state for activation and rollback.
 
+For the strongest supply-chain control, OpenLiteSpeed should be installed by
+the server administrator before module integration. The next preferred option
+is a repository that the administrator has already configured and verified.
+The extension's automated vendor-bootstrap and custom-repository modes remain
+available for controlled environments, but they execute package-management
+operations as root and trust the external source selected by the administrator.
+
 Manual changes in OpenLiteSpeed WebAdmin are possible, but the extension remains
 authoritative: rebuilding a domain vhost regenerates `vhconf.conf`.
 
@@ -342,11 +349,21 @@ OpenLiteSpeed
 Installing the extension does not automatically change the web stack or enable
 OLS for any domain.
 
+The recommended security posture is to install OpenLiteSpeed manually as the
+server administrator, verify its packages and repository keys according to the
+local operating-system policy, and then select `OpenLiteSpeed already installed`
+in the extension. If package installation should be delegated to the extension,
+prefer `Repository already configured` after the administrator has verified the
+repository. Automated bootstrap and custom repository modes are explicit
+administrator opt-ins and transfer trust to their configured external source.
+
 The onboarding flow is:
 
 1. check the operating system, Plesk, nginx binary and service state, Apache,
    and available capabilities;
-2. install OpenLiteSpeed and validate the Plesk-provided `lsphp` binaries;
+2. verify the administrator-installed OpenLiteSpeed package, or explicitly
+   choose an automated provisioning mode, and validate the Plesk-provided
+   `lsphp` binaries;
 3. configure the private OLS listener;
 4. inventory domains and their PHP configuration;
 5. analyze compatibility and prepare each virtual host;
