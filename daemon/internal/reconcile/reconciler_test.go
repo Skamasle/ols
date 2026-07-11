@@ -195,6 +195,23 @@ func TestDecideFlagsBlockedFindings(t *testing.T) {
 	}
 }
 
+func TestDecideBlocksWhenScannerIsUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "desired-state.json")
+	writeState(t, statePath, olsState)
+
+	r := New(state.New(statePath), nil)
+	decision, err := r.Decide(eventqueue.Event{
+		Path: "/var/www/vhosts/example.test/httpdocs/.htaccess",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if decision.Action != ActionBlocked {
+		t.Fatalf("expected blocked, got %s", decision.Action)
+	}
+}
+
 const olsState = `{
   "schemaVersion": 1,
   "generation": 3,

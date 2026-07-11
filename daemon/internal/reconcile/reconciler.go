@@ -80,10 +80,10 @@ func (r *Reconciler) Decide(event eventqueue.Event) (Decision, error) {
 	findingCount := 0
 	if nil == r.scanner {
 		return Decision{
-			Action:       ActionReload,
+			Action:       ActionBlocked,
 			DomainName:   domain.Name,
 			DomainRoot:   root,
-			Reason:       reason + " (htaccess scanner unavailable)",
+			Reason:       reason + " (htaccess scanner unavailable; reload blocked)",
 			Generation:   st.Generation,
 			Routing:      domain.AppliedRouting,
 			FilesScanned: filesScanned,
@@ -97,11 +97,11 @@ func (r *Reconciler) Decide(event eventqueue.Event) (Decision, error) {
 	action := ActionReload
 	if "review" == scan.Status {
 		action = ActionReview
-		reason = scan.Summary() + "; reloading anyway and keeping findings for future deny-list tuning"
+		reason = scan.Summary() + "; automatic reload requires manual review"
 	}
 	if "blocked" == scan.Status {
 		action = ActionBlocked
-		reason = scan.Summary() + "; reloading anyway and keeping findings for future deny-list tuning"
+		reason = scan.Summary() + "; automatic reload blocked"
 	}
 
 	return Decision{

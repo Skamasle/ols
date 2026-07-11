@@ -25,6 +25,11 @@ const (
 
 var reloads int64
 
+type olsController interface {
+	Validate() error
+	Reload() error
+}
+
 func main() {
 	logger, err := syslog.New(syslog.LOG_DAEMON|syslog.LOG_INFO, syslogTag)
 	if err != nil {
@@ -87,44 +92,7 @@ func main() {
 				continue
 			}
 
-			switch decision.Action {
-			case reconcile.ActionReload:
-				if err := olsManager.Validate(); err != nil {
-					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
-					continue
-				}
-				count := atomic.AddInt64(&reloads, 1)
-				info("Reload requested for " + decision.DomainName + " after " + event.Reason + " (reloads: " + itoa64(count) + ")")
-				if err := olsManager.Reload(); err != nil {
-					warn("OLS reload failed for " + event.Key + ": " + err.Error())
-				}
-			case reconcile.ActionNoop:
-				info("No reconcile needed for " + event.Key + ": " + decision.Reason)
-			case reconcile.ActionReview:
-				if err := olsManager.Validate(); err != nil {
-					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
-					continue
-				}
-				count := atomic.AddInt64(&reloads, 1)
-				warn("Reloading despite review for " + decision.DomainName + ": " + decision.Reason + " (reloads: " + itoa64(count) + ")")
-				if err := olsManager.Reload(); err != nil {
-					warn("OLS reload failed for " + event.Key + ": " + err.Error())
-				}
-			case reconcile.ActionBlocked:
-				if err := olsManager.Validate(); err != nil {
-					warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
-					continue
-				}
-				count := atomic.AddInt64(&reloads, 1)
-				warn("Reloading despite blocked scan for " + decision.DomainName + ": " + decision.Reason + " (reloads: " + itoa64(count) + ")")
-				if err := olsManager.Reload(); err != nil {
-					warn("OLS reload failed for " + event.Key + ": " + err.Error())
-				}
-			case reconcile.ActionMissing:
-				warn("Skipping reconcile for " + event.Key + ": " + decision.Reason)
-			default:
-				warn("Unknown reconcile action for " + event.Key + ": " + string(decision.Action))
-			}
+			executeDecision(decision, event, olsManager, info, warn)
 		}
 	}()
 
@@ -144,6 +112,38 @@ func main() {
 			info("Shutdown signal received")
 			return
 		}
+	}
+}
+
+func executeDecision(
+	decision reconcile.Decision,
+	event eventqueue.Event,
+	manager olsController,
+	info func(string),
+	warn func(string),
+) {
+	switch decision.Action {
+	case reconcile.ActionReload:
+		if err := manager.Validate(); err != nil {
+			warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
+			return
+		}
+		if err := manager.Reload(); err != nil {
+			warn("OLS reload failed for " + event.Key + ": " + err.Error())
+			return
+		}
+		count := atomic.AddInt64(&reloads, 1)
+		info("Reload completed for " + decision.DomainName + " after " + event.Reason + " (reloads: " + itoa64(count) + ")")
+	case reconcile.ActionNoop:
+		info("No reconcile needed for " + event.Key + ": " + decision.Reason)
+	case reconcile.ActionReview:
+		warn("Automatic reload requires review for " + decision.DomainName + ": " + decision.Reason)
+	case reconcile.ActionBlocked:
+		warn("Automatic reload blocked for " + decision.DomainName + ": " + decision.Reason)
+	case reconcile.ActionMissing:
+		warn("Skipping reconcile for " + event.Key + ": " + decision.Reason)
+	default:
+		warn("Unknown reconcile action for " + event.Key + ": " + string(decision.Action))
 	}
 }
 
