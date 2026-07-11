@@ -4,7 +4,8 @@ This directory contains the standalone `skamasle-ols-agent`.
 
 The current implementation focuses on `.htaccess` changes:
 
-- watches Plesk `httpdocs` trees with `fsnotify`;
+- watches only the `httpdocs` trees whose desired state has
+  `appliedRouting: ols`, using `fsnotify`;
 - groups rapid changes by vhost with a debounce queue;
 - reads the extension desired state;
 - ignores domains whose applied routing is not `ols`;
@@ -12,8 +13,36 @@ The current implementation focuses on `.htaccess` changes:
 - reloads OLS after every relevant change while keeping scanner output for future safety rules;
 - runs `openlitespeed -t` before each graceful reload.
 
+## Reload policy
+
+The systemd unit defaults to the operationally permissive policy:
+
+```text
+SKAMASLE_OLS_RELOAD_POLICY=permissive
+```
+
+`permissive` logs `review` and `blocked` compatibility findings, validates the
+complete OLS configuration, and reloads when validation succeeds. `strict`
+logs the findings without touching OLS. Missing state and unrelated/native
+domains never trigger a reload under either policy.
+
+Use a systemd drop-in to enable strict mode without editing the installed unit:
+
+```ini
+[Service]
+Environment=SKAMASLE_OLS_RELOAD_POLICY=strict
+```
+
+Then run `systemctl daemon-reload` and restart the agent. Invalid policy values
+fall back to `permissive` and produce a warning in the service log.
+
 The agent remains a separate deliverable and is not included in the Plesk
 extension ZIP.
+
+The watched-domain list is synchronized from `desired-state.json` every 30
+seconds and on `SIGHUP`. Domains returned to native routing are removed from
+the watcher; newly activated OLS domains are added without restarting the
+agent.
 
 ## Build and verify
 

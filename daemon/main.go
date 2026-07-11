@@ -18,9 +18,13 @@ import (
 )
 
 const (
-	watchRoot = "/var/www/vhosts"
-	debounce  = 2 * time.Second
-	syslogTag = "skamasle-ols-agent"
+	watchRoot              = "/var/www/vhosts"
+	debounce               = 2 * time.Second
+	syslogTag              = "skamasle-ols-agent"
+	reloadPolicyEnv        = "SKAMASLE_OLS_RELOAD_POLICY"
+	reloadPolicyPermissive = "permissive"
+	reloadPolicyStrict     = "strict"
+	stateSyncInterval      = 30 * time.Second
 )
 
 var reloads int64
@@ -45,6 +49,7 @@ func main() {
 	}
 
 	info("Starting Skamasle OLS .htaccess watcher")
+	stateStore := state.New("/usr/local/psa/var/modules/skamasle-ols/desired-state.json")
 
 	watcher, err := htaccesswatch.New(watchRoot)
 	if err != nil {
@@ -52,16 +57,20 @@ func main() {
 	}
 	defer watcher.Close()
 
-	if err := watcher.Rescan(); err != nil {
-		fatal("Initial vhost scan failed: " + err.Error())
+	if err := syncWatchRoots(watcher, stateStore); err != nil {
+		warn("Initial OLS domain watch sync failed; periodic retry enabled: " + err.Error())
 	}
 
 	scheduler := eventqueue.New(debounce)
 	defer scheduler.Close()
 
-	stateStore := state.New("/usr/local/psa/var/modules/skamasle-ols/desired-state.json")
 	reconciler := reconcile.New(stateStore, htaccessscan.New())
 	olsManager := ols.New(nil)
+	reloadPolicy, policyWarning := reloadPolicyFromEnvironment()
+	if policyWarning != "" {
+		warn(policyWarning)
+	}
+	info("Reload policy: " + reloadPolicy)
 
 	go func() {
 		for event := range watcher.Events() {
@@ -92,58 +101,105 @@ func main() {
 				continue
 			}
 
-			executeDecision(decision, event, olsManager, info, warn)
+			executeDecision(decision, event, olsManager, reloadPolicy, info, warn)
 		}
 	}()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	stateTicker := time.NewTicker(stateSyncInterval)
+	defer stateTicker.Stop()
 
 	info("Watcher active. Monitoring .htaccess changes...")
 
 	for {
-		switch sig := <-sigCh; sig {
-		case syscall.SIGHUP:
-			info("SIGHUP received, rescanning vhosts")
-			if err := watcher.Rescan(); err != nil {
-				warn("Rescan failed: " + err.Error())
+		select {
+		case sig := <-sigCh:
+			switch sig {
+			case syscall.SIGHUP:
+				info("SIGHUP received, synchronizing OLS domain watches")
+				if err := syncWatchRoots(watcher, stateStore); err != nil {
+					warn("OLS domain watch sync failed: " + err.Error())
+				}
+			default:
+				info("Shutdown signal received")
+				return
 			}
-		default:
-			info("Shutdown signal received")
-			return
+		case <-stateTicker.C:
+			if err := syncWatchRoots(watcher, stateStore); err != nil {
+				warn("Periodic OLS domain watch sync failed: " + err.Error())
+			}
 		}
 	}
+}
+
+func syncWatchRoots(watcher *htaccesswatch.Watcher, store *state.Store) error {
+	value, err := store.Load()
+	if err != nil {
+		return err
+	}
+	return watcher.SyncRoots(state.AppliedOLSDocumentRoots(value))
 }
 
 func executeDecision(
 	decision reconcile.Decision,
 	event eventqueue.Event,
 	manager olsController,
+	reloadPolicy string,
 	info func(string),
 	warn func(string),
 ) {
 	switch decision.Action {
 	case reconcile.ActionReload:
-		if err := manager.Validate(); err != nil {
-			warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
-			return
-		}
-		if err := manager.Reload(); err != nil {
-			warn("OLS reload failed for " + event.Key + ": " + err.Error())
-			return
-		}
-		count := atomic.AddInt64(&reloads, 1)
-		info("Reload completed for " + decision.DomainName + " after " + event.Reason + " (reloads: " + itoa64(count) + ")")
+		reloadOLS(decision, event, manager, info, warn)
 	case reconcile.ActionNoop:
 		info("No reconcile needed for " + event.Key + ": " + decision.Reason)
 	case reconcile.ActionReview:
-		warn("Automatic reload requires review for " + decision.DomainName + ": " + decision.Reason)
+		warn("Manual review recommended for " + decision.DomainName + ": " + decision.Reason)
+		if reloadPolicy == reloadPolicyPermissive {
+			reloadOLS(decision, event, manager, info, warn)
+		}
 	case reconcile.ActionBlocked:
-		warn("Automatic reload blocked for " + decision.DomainName + ": " + decision.Reason)
+		warn("Compatibility scan blocked for " + decision.DomainName + ": " + decision.Reason)
+		if reloadPolicy == reloadPolicyPermissive {
+			reloadOLS(decision, event, manager, info, warn)
+		}
 	case reconcile.ActionMissing:
 		warn("Skipping reconcile for " + event.Key + ": " + decision.Reason)
 	default:
 		warn("Unknown reconcile action for " + event.Key + ": " + string(decision.Action))
+	}
+}
+
+func reloadOLS(
+	decision reconcile.Decision,
+	event eventqueue.Event,
+	manager olsController,
+	info func(string),
+	warn func(string),
+) {
+	if err := manager.Validate(); err != nil {
+		warn("Skipping reload for " + decision.DomainName + ": " + err.Error())
+		return
+	}
+	if err := manager.Reload(); err != nil {
+		warn("OLS reload failed for " + event.Key + ": " + err.Error())
+		return
+	}
+	count := atomic.AddInt64(&reloads, 1)
+	info("Reload completed for " + decision.DomainName + " after " + event.Reason + " (reloads: " + itoa64(count) + ")")
+}
+
+func reloadPolicyFromEnvironment() (string, string) {
+	value := os.Getenv(reloadPolicyEnv)
+	switch value {
+	case "", reloadPolicyPermissive:
+		return reloadPolicyPermissive, ""
+	case reloadPolicyStrict:
+		return reloadPolicyStrict, ""
+	default:
+		return reloadPolicyPermissive,
+			"Invalid " + reloadPolicyEnv + " value " + value + "; using permissive"
 	}
 }
 

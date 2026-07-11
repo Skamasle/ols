@@ -7,6 +7,10 @@ Type=simple
 ExecStart=/usr/local/bin/skamasle-ols-agent
 ExecReload=/bin/kill -HUP $MAINPID
 
+# permissive: validate and reload on review/blocked findings, while warning.
+# strict: keep review/blocked findings fail-closed and require manual action.
+Environment=SKAMASLE_OLS_RELOAD_POLICY=permissive
+
 Restart=on-failure
 RestartSec=5s
 

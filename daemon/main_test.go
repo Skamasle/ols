@@ -26,7 +26,7 @@ func (f *fakeOLSController) Reload() error {
 	return f.reloadErr
 }
 
-func TestExecuteDecisionDoesNotTouchOLSForFailClosedActions(t *testing.T) {
+func TestExecuteDecisionStrictDoesNotTouchOLSForFailClosedActions(t *testing.T) {
 	for _, action := range []reconcile.Action{
 		reconcile.ActionReview,
 		reconcile.ActionBlocked,
@@ -39,11 +39,31 @@ func TestExecuteDecisionDoesNotTouchOLSForFailClosedActions(t *testing.T) {
 				reconcile.Decision{Action: action, DomainName: "example.test"},
 				eventqueue.Event{Key: "example.test"},
 				manager,
+				reloadPolicyStrict,
 				func(string) {},
 				func(string) {},
 			)
 			if manager.validateCalls != 0 || manager.reloadCalls != 0 {
 				t.Fatalf("action %s touched OLS: validate=%d reload=%d", action, manager.validateCalls, manager.reloadCalls)
+			}
+		})
+	}
+}
+
+func TestExecuteDecisionPermissiveReloadsReviewAndBlocked(t *testing.T) {
+	for _, action := range []reconcile.Action{reconcile.ActionReview, reconcile.ActionBlocked} {
+		t.Run(string(action), func(t *testing.T) {
+			manager := &fakeOLSController{}
+			executeDecision(
+				reconcile.Decision{Action: action, DomainName: "example.test"},
+				eventqueue.Event{Key: "example.test", Reason: "test"},
+				manager,
+				reloadPolicyPermissive,
+				func(string) {},
+				func(string) {},
+			)
+			if manager.validateCalls != 1 || manager.reloadCalls != 1 {
+				t.Fatalf("permissive action %s must reload after validation", action)
 			}
 		})
 	}
@@ -56,6 +76,7 @@ func TestExecuteDecisionReloadsOnlyAfterSuccessfulValidation(t *testing.T) {
 		reconcile.Decision{Action: reconcile.ActionReload, DomainName: "example.test"},
 		eventqueue.Event{Key: "example.test", Reason: "test"},
 		manager,
+		reloadPolicyStrict,
 		func(string) {},
 		func(string) {},
 	)
@@ -74,6 +95,7 @@ func TestExecuteDecisionStopsWhenValidationFails(t *testing.T) {
 		reconcile.Decision{Action: reconcile.ActionReload, DomainName: "example.test"},
 		eventqueue.Event{Key: "example.test"},
 		manager,
+		reloadPolicyPermissive,
 		func(string) {},
 		func(string) {},
 	)
@@ -82,5 +104,25 @@ func TestExecuteDecisionStopsWhenValidationFails(t *testing.T) {
 	}
 	if atomic.LoadInt64(&reloads) != 0 {
 		t.Fatal("failed validation changed reload count")
+	}
+}
+
+func TestReloadPolicyFromEnvironment(t *testing.T) {
+	t.Setenv(reloadPolicyEnv, "")
+	policy, warning := reloadPolicyFromEnvironment()
+	if policy != reloadPolicyPermissive || warning != "" {
+		t.Fatalf("unexpected default policy: %s %s", policy, warning)
+	}
+
+	t.Setenv(reloadPolicyEnv, reloadPolicyStrict)
+	policy, warning = reloadPolicyFromEnvironment()
+	if policy != reloadPolicyStrict || warning != "" {
+		t.Fatalf("unexpected strict policy: %s %s", policy, warning)
+	}
+
+	t.Setenv(reloadPolicyEnv, "invalid")
+	policy, warning = reloadPolicyFromEnvironment()
+	if policy != reloadPolicyPermissive || warning == "" {
+		t.Fatalf("invalid policy must fall back with warning: %s %s", policy, warning)
 	}
 }

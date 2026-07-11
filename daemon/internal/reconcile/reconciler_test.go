@@ -52,7 +52,7 @@ func TestDecideReloadsForOlsDomain(t *testing.T) {
         "pleskHandlerId": "plesk-php83-fpm",
         "version": "8.3",
         "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp",
-        "socket": "/tmp/example.sock"
+        "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"
       },
       "requestedRouting": "ols",
       "appliedRouting": "ols"
@@ -115,7 +115,7 @@ func TestDecideNoopForNativeDomain(t *testing.T) {
         "pleskHandlerId": "plesk-php83-fpm",
         "version": "8.3",
         "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp",
-        "socket": "/tmp/example.sock"
+        "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"
       },
       "requestedRouting": "native",
       "appliedRouting": "native"
@@ -242,7 +242,7 @@ const olsState = `{
         "pleskHandlerId": "plesk-php83-fpm",
         "version": "8.3",
         "lsphpBinary": "/opt/plesk/php/8.3/bin/lsphp",
-        "socket": "/tmp/example.sock"
+        "socket": "/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-d80d504d124630471ee36221.sock"
       },
       "requestedRouting": "ols",
       "appliedRouting": "ols"

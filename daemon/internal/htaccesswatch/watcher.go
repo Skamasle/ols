@@ -35,6 +35,7 @@ type Watcher struct {
 
 	mu     sync.Mutex
 	paths  map[string]struct{}
+	roots  map[string]struct{}
 	closed bool
 	wg     sync.WaitGroup
 }
@@ -56,6 +57,7 @@ func New(root string) (*Watcher, error) {
 		events:  make(chan Event, 256),
 		errors:  make(chan error, 32),
 		paths:   make(map[string]struct{}),
+		roots:   make(map[string]struct{}),
 	}
 
 	w.wg.Add(1)
@@ -91,22 +93,47 @@ func (w *Watcher) Errors() <-chan error {
 	return w.errors
 }
 
-func (w *Watcher) Rescan() error {
-	return filepath.Walk(w.root, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info == nil {
-			return nil
+func (w *Watcher) SyncRoots(roots []string) error {
+	allowed := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		clean := filepath.Clean(root)
+		relative, err := filepath.Rel(w.root, clean)
+		if err != nil || relative == "." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || relative == ".." {
+			return fmt.Errorf("watch root is outside %s: %s", w.root, root)
 		}
-		if !info.IsDir() {
-			return nil
+		allowed[clean] = struct{}{}
+	}
+
+	w.mu.Lock()
+	for path := range w.paths {
+		if !pathWithinRoots(path, allowed) {
+			_ = w.watcher.Remove(path)
+			delete(w.paths, path)
 		}
-		if w.isTooDeepWatchedDir(path) {
-			return filepath.SkipDir
+	}
+	w.roots = allowed
+	w.mu.Unlock()
+
+	for root := range allowed {
+		if err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if !info.IsDir() {
+				return nil
+			}
+			if w.isTooDeepWatchedDir(path) {
+				return filepath.SkipDir
+			}
+			if !w.isWatchedDir(path) {
+				return nil
+			}
+			return w.addDir(path)
+		}); err != nil {
+			return err
 		}
-		if !w.isWatchedDir(path) {
-			return nil
-		}
-		return w.addDir(path)
-	})
+	}
+	return nil
 }
 
 func (w *Watcher) forward() {
@@ -208,35 +235,40 @@ func (w *Watcher) emitError(err error) {
 
 func (w *Watcher) isWatchedDir(path string) bool {
 	clean := filepath.Clean(path)
-	if clean == w.root {
-		return true
-	}
-	relative, err := filepath.Rel(w.root, clean)
-	if err != nil || strings.HasPrefix(relative, "..") {
-		return false
-	}
-	parts := strings.Split(relative, string(os.PathSeparator))
-	if len(parts) == 1 {
-		return true
-	}
-	for index, part := range parts {
-		if part == httpdocsDir {
-			return len(parts)-index-1 <= maxHttpdocsDepth
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for root := range w.roots {
+		relative, err := filepath.Rel(root, clean)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+			continue
 		}
+		if relative == "." {
+			return true
+		}
+		return len(strings.Split(relative, string(os.PathSeparator))) <= maxHttpdocsDepth
 	}
 	return false
 }
 
 func (w *Watcher) isTooDeepWatchedDir(path string) bool {
 	clean := filepath.Clean(path)
-	relative, err := filepath.Rel(w.root, clean)
-	if err != nil || strings.HasPrefix(relative, "..") {
-		return false
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for root := range w.roots {
+		relative, err := filepath.Rel(root, clean)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+			continue
+		}
+		return relative != "." && len(strings.Split(relative, string(os.PathSeparator))) > maxHttpdocsDepth
 	}
-	parts := strings.Split(relative, string(os.PathSeparator))
-	for index, part := range parts {
-		if part == httpdocsDir {
-			return len(parts)-index-1 > maxHttpdocsDepth
+	return false
+}
+
+func pathWithinRoots(path string, roots map[string]struct{}) bool {
+	for root := range roots {
+		relative, err := filepath.Rel(root, path)
+		if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+			return true
 		}
 	}
 	return false

@@ -28,7 +28,10 @@ func TestVhostRootDerivation(t *testing.T) {
 }
 
 func TestWatchedDirCheck(t *testing.T) {
-	w := &Watcher{root: "/var/www/vhosts"}
+	w := &Watcher{
+		root:  "/var/www/vhosts",
+		roots: map[string]struct{}{`/var/www/vhosts/example.test/httpdocs`: {}},
+	}
 	if !w.isWatchedDir("/var/www/vhosts/example.test/httpdocs") {
 		t.Fatal("httpdocs directory must be watched")
 	}
@@ -47,8 +50,8 @@ func TestWatchedDirCheck(t *testing.T) {
 	if w.isWatchedDir("/var/www/vhosts/example.test/httpdocs-old") {
 		t.Fatal("directory name containing httpdocs must not match")
 	}
-	if !w.isWatchedDir("/var/www/vhosts/example.test") {
-		t.Fatal("vhost root must be watched for new httpdocs trees")
+	if w.isWatchedDir("/var/www/vhosts/other.test/httpdocs") {
+		t.Fatal("non-OLS document root must not be watched")
 	}
 }
 
@@ -72,7 +75,7 @@ func TestWatcherEmitsHtaccessEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer watcher.Close()
-	if err := watcher.Rescan(); err != nil {
+	if err := watcher.SyncRoots([]string{httpdocs}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,5 +100,38 @@ func TestWatcherEmitsHtaccessEvent(t *testing.T) {
 		case <-timeout:
 			t.Fatal("timed out waiting for .htaccess event")
 		}
+	}
+}
+
+func TestSyncRootsRemovesNativeDomainWatches(t *testing.T) {
+	root := t.TempDir()
+	olsRoot := filepath.Join(root, "ols.test", "httpdocs")
+	nativeRoot := filepath.Join(root, "native.test", "httpdocs")
+	if err := os.MkdirAll(olsRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(nativeRoot, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	watcher, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer watcher.Close()
+	if err := watcher.SyncRoots([]string{olsRoot, nativeRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := watcher.paths[nativeRoot]; !exists {
+		t.Fatal("expected initial native root watch")
+	}
+	if err := watcher.SyncRoots([]string{olsRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := watcher.paths[nativeRoot]; exists {
+		t.Fatal("disabled OLS root watch was not removed")
+	}
+	if _, exists := watcher.paths[olsRoot]; !exists {
+		t.Fatal("active OLS root watch was removed")
 	}
 }
