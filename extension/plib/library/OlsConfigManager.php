@@ -2,6 +2,8 @@
 
 class Modules_SkamasleOls_OlsConfigManager
 {
+    const BACKEND_TLS_NAME = 'localhost';
+
     private $serverRoot;
     private $configRoot;
     private $stateRoot;
@@ -832,6 +834,40 @@ class Modules_SkamasleOls_OlsConfigManager
             );
         }
 
+        $opensslConfigPath = $this->createBackendTlsOpenSslConfig(
+            dirname($certPath)
+        );
+        if (false === $opensslConfigPath) {
+            return array(
+                'available' => false,
+                'configured' => false,
+                'error' => 'Unable to create the OLS listener OpenSSL configuration.',
+                'target' => $this->diagnosePath($certPath),
+            );
+        }
+
+        try {
+            return $this->generateSelfSignedCertificateWithConfig(
+                $subject,
+                $validDays,
+                $keyPath,
+                $certPath,
+                $opensslConfigPath
+            );
+        } finally {
+            if (is_file($opensslConfigPath)) {
+                @unlink($opensslConfigPath);
+            }
+        }
+    }
+
+    private function generateSelfSignedCertificateWithConfig(
+        $subject,
+        $validDays,
+        $keyPath,
+        $certPath,
+        $opensslConfigPath
+    ) {
         $privateKey = @openssl_pkey_new(array(
             'private_key_type' => OPENSSL_KEYTYPE_RSA,
             'private_key_bits' => 2048,
@@ -852,7 +888,11 @@ class Modules_SkamasleOls_OlsConfigManager
             'organizationName' => 'skamasle-OLS Backend',
             'organizationalUnitName' => 'skamasle-ols',
             'commonName' => 'localhost',
-        ), $privateKey, array('digest_alg' => 'sha256'));
+        ), $privateKey, array(
+            'digest_alg' => 'sha256',
+            'config' => $opensslConfigPath,
+            'req_extensions' => 'v3_req',
+        ));
         if (false === $csr) {
             return array(
                 'available' => false,
@@ -867,7 +907,11 @@ class Modules_SkamasleOls_OlsConfigManager
             null,
             $privateKey,
             $validDays,
-            array('digest_alg' => 'sha256')
+            array(
+                'digest_alg' => 'sha256',
+                'config' => $opensslConfigPath,
+                'x509_extensions' => 'v3_req',
+            )
         );
         if (false === $certificate) {
             return array(
@@ -917,6 +961,41 @@ class Modules_SkamasleOls_OlsConfigManager
             'subject' => $subject,
             'validDays' => $validDays,
         );
+    }
+
+    private function createBackendTlsOpenSslConfig($directory)
+    {
+        $path = tempnam($directory, '.skamasle-ols-openssl.');
+        if (false === $path) {
+            return false;
+        }
+
+        $content = implode(PHP_EOL, array(
+            '[ req ]',
+            'distinguished_name = req_distinguished_name',
+            'req_extensions = v3_req',
+            '',
+            '[ req_distinguished_name ]',
+            '',
+            '[ v3_req ]',
+            'basicConstraints = critical,CA:FALSE',
+            'keyUsage = critical,digitalSignature,keyEncipherment',
+            'extendedKeyUsage = serverAuth',
+            'subjectAltName = @alt_names',
+            '',
+            '[ alt_names ]',
+            'DNS.1 = ' . self::BACKEND_TLS_NAME,
+            'IP.1 = 127.0.0.1',
+            '',
+        ));
+        if (false === file_put_contents($path, $content, LOCK_EX)
+            || !chmod($path, 0600)
+        ) {
+            @unlink($path);
+            return false;
+        }
+
+        return $path;
     }
 
     private function renderVhostConfig(array $domain)

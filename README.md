@@ -214,14 +214,14 @@ errorlog /var/www/vhosts/system/DOMINIO/logs/ols_error_log {
 
 That error log path is rendered in each managed OLS vhost config.
 
-The private OLS listener also needs TLS to work with `secure 1`. The current
-strategy is to generate a global self-signed certificate after OLS is
-installed, store it under `/usr/local/lsws/conf/ssl/`, and reuse it for the
-loopback listener across all domains. The intended filenames are
+The private OLS listener also needs TLS to work with `secure 1`. The extension
+generates a global self-signed certificate after OLS is installed, stores it
+under `/usr/local/lsws/conf/ssl/`, and reuses it for the loopback listener
+across all domains. The certificate is valid for `localhost` and `127.0.0.1`;
+nginx explicitly trusts and verifies it when proxying to OLS. The filenames are
 `skamasle-ols.key` and `skamasle-ols.crt`, with a long-lived validity window
-of about 10 years. This is a temporary backend-only trust anchor for
-nginx-to-OLS communication until the integration can reuse a better SSL source
-or a different trust model.
+of about 10 years. This certificate is a backend-only trust anchor and is not
+exposed to Internet clients.
 
 ## Per-Domain Modes
 

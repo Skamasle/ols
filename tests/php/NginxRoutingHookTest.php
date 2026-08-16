@@ -69,8 +69,21 @@ assertSameValue(
 );
 assertSameValue(
     true,
-    false !== strpos($config, 'proxy_ssl_verify off;'),
-    'nginx hook must not require backend certificate validation'
+    false !== strpos($config, 'proxy_ssl_verify on;'),
+    'nginx hook must verify the OLS backend certificate'
+);
+assertSameValue(
+    true,
+    false !== strpos($config, 'proxy_ssl_name localhost;'),
+    'nginx hook must validate the OLS backend certificate as localhost'
+);
+assertSameValue(
+    true,
+    false !== strpos(
+        $config,
+        'proxy_ssl_trusted_certificate /usr/local/lsws/conf/ssl/skamasle-ols.crt;'
+    ),
+    'nginx hook must trust only the managed OLS backend certificate'
 );
 assertSameValue(
     true,

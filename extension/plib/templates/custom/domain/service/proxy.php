@@ -44,6 +44,14 @@ if ($skamasleOlsEnabled) {
         proxy_pass <?= $skamasleProxyTarget ?>;
 <?php if ($skamasleOlsEnabled || $OPT['ssl']): ?>
         proxy_hide_header upgrade;
+<?php if ($skamasleOlsEnabled): ?>
+        proxy_ssl_server_name on;
+        proxy_ssl_name localhost;
+        proxy_ssl_session_reuse off;
+        proxy_ssl_verify on;
+        proxy_ssl_trusted_certificate /usr/local/lsws/conf/ssl/skamasle-ols.crt;
+        proxy_ssl_verify_depth 1;
+<?php else: ?>
         proxy_ssl_server_name on;
         <?php if ($VAR->server->webserver->listenLocalhost && ($OPT['default'] ?? false)): ?>
         proxy_ssl_name $ip_default_host;
@@ -52,6 +60,7 @@ if ($skamasleOlsEnabled) {
         <?php endif ?>
         proxy_ssl_session_reuse off;
         proxy_ssl_verify off;
+<?php endif ?>
 <?php endif ?>
         proxy_set_header X-Forwarded-Proto <?php echo $skamasleOlsEnabled ? 'https' : '$scheme'; ?>;
 <?php if ($skamasleOlsEnabled || !empty($OPT['ssl'])): ?>

@@ -46,6 +46,19 @@ assertSameValue(
     'Bundled template must emit one resolved proxy_pass target'
 );
 assertSameValue(
+    true,
+    false !== strpos($bundledTemplate, 'proxy_ssl_verify on;'),
+    'Bundled template must verify the OLS backend certificate'
+);
+assertSameValue(
+    true,
+    false !== strpos(
+        $bundledTemplate,
+        'proxy_ssl_trusted_certificate /usr/local/lsws/conf/ssl/skamasle-ols.crt;'
+    ),
+    'Bundled template must trust the managed OLS backend certificate'
+);
+assertSameValue(
     false,
     false !== strpos($bundledTemplate, 'access_log off;'),
     'Bundled template must leave nginx access logging enabled for Plesk statistics'

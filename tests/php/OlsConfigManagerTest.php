@@ -203,6 +203,22 @@ try {
         is_file($manager->getListenerSslCertPath()),
         'Listener SSL certificate must be generated'
     );
+    $certificateDetails = openssl_x509_parse(
+        file_get_contents($manager->getListenerSslCertPath())
+    );
+    $subjectAltName = isset($certificateDetails['extensions']['subjectAltName'])
+        ? $certificateDetails['extensions']['subjectAltName']
+        : '';
+    assertSameValue(
+        true,
+        false !== strpos($subjectAltName, 'DNS:localhost'),
+        'Listener SSL certificate must authenticate localhost'
+    );
+    assertSameValue(
+        true,
+        false !== strpos($subjectAltName, 'IP Address:127.0.0.1'),
+        'Listener SSL certificate must authenticate the loopback address'
+    );
     $vhostContent = file_get_contents($vhost['path']);
     assertSameValue(
         true,
