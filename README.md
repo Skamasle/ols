@@ -191,6 +191,12 @@ The real isolation boundary is the vhost config, the socket path, and the
 domain system user and group. Domain-specific names are optional for operator
 clarity, but they are not required for safety.
 
+LSAPI sockets use the proven Plesk module runtime path
+`/usr/local/psa/var/modules/skamasle-ols/run/lsphp/sk-HASH.sock`. The shared
+parent is owned by the OpenLiteSpeed identity (`apache:apache`) with mode
+`0750`, while each LSPHP process still runs as the domain's `extUser` and
+`extGroup`.
+
 nginx forwards `X-Real-IP` and `X-Forwarded-For` to the OLS backend, so
 applications can recover the client IP from request headers. OLS access logging
 is intentionally disabled by default. nginx/Plesk remains responsible for access

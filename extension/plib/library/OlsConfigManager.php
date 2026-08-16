@@ -8,6 +8,8 @@ class Modules_SkamasleOls_OlsConfigManager
     private $configRoot;
     private $stateRoot;
     private $runtimeRoot;
+    private $serverUser;
+    private $serverGroup;
 
     private static function defaultStateRoot()
     {
@@ -22,7 +24,9 @@ class Modules_SkamasleOls_OlsConfigManager
         $serverRoot = '/usr/local/lsws/conf',
         $configRoot = '/usr/local/lsws/conf/skamasle-ols',
         $stateRoot = null,
-        $runtimeRoot = null
+        $runtimeRoot = null,
+        $serverUser = 'apache',
+        $serverGroup = 'apache'
     ) {
         $this->serverRoot = rtrim($serverRoot, '/');
         $this->configRoot = rtrim($configRoot, '/');
@@ -34,6 +38,8 @@ class Modules_SkamasleOls_OlsConfigManager
             null === $runtimeRoot ? $this->stateRoot . '/run' : $runtimeRoot,
             '/'
         );
+        $this->serverUser = $this->normalizeAccountName($serverUser, 'user');
+        $this->serverGroup = $this->normalizeAccountName($serverGroup, 'group');
     }
 
     public function getConfigRoot()
@@ -186,9 +192,7 @@ class Modules_SkamasleOls_OlsConfigManager
         $this->ensureDirectory($this->getListenerSslDirectory());
         $this->ensureDirectory($this->stateRoot . '/php');
         $this->ensureDirectory($this->stateRoot . '/nginx-routing');
-        $this->ensureDirectoryWithMode($this->getSocketDirectory(), 01777);
-        $this->ensureDirectory($this->runtimeRoot);
-        $this->ensureDirectory($this->runtimeRoot . '/lsphp');
+        $this->ensureSocketLayout();
     }
 
     public function logEvent($event, array $context = array())
@@ -375,6 +379,8 @@ class Modules_SkamasleOls_OlsConfigManager
     {
         $user = $this->normalizeAccountName($user, 'user');
         $group = $this->normalizeAccountName($group, 'group');
+        $this->serverUser = $user;
+        $this->serverGroup = $group;
         $paths = array(
             $this->getHttpdConfigPath(),
             $this->getHttpdConfigPath() . '0',
@@ -439,6 +445,8 @@ class Modules_SkamasleOls_OlsConfigManager
             $writeResult['group'] = $group;
             $results[] = $writeResult;
         }
+
+        $this->ensureSocketLayout();
 
         return array(
             'available' => true,
@@ -1312,8 +1320,7 @@ class Modules_SkamasleOls_OlsConfigManager
         $this->ensureDirectoryWithMode($this->serverRoot . '/vhosts/' . $name, 0755);
         $this->ensureDirectoryWithMode($this->stateRoot . '/php', 0755);
         $this->ensureDirectoryWithMode($this->stateRoot . '/php/' . $guid, 0750);
-        $this->ensureDirectoryWithMode($this->runtimeRoot, 0755);
-        $this->ensureDirectoryWithMode($this->runtimeRoot . '/lsphp', 01777);
+        $this->ensureSocketLayout();
 
         $iniDirectory = $this->stateRoot . '/php/' . $guid;
         $cacheDirectory = $this->getCachePath($domain);
@@ -1348,6 +1355,44 @@ class Modules_SkamasleOls_OlsConfigManager
             if (!chgrp($cacheDirectory, (string) $domain['systemGroup'])) {
                 throw new RuntimeException(
                     'Unable to set LSCache directory group: ' . $cacheDirectory
+                    . $this->lastErrorSuffix()
+                );
+            }
+        }
+    }
+
+    private function ensureSocketLayout()
+    {
+        $this->ensureDirectoryWithMode($this->runtimeRoot, 0755);
+        $socketDirectory = $this->getSocketDirectory();
+        $this->ensureDirectoryWithMode($socketDirectory, 0750);
+
+        clearstatcache(true, $socketDirectory);
+        $userEntry = function_exists('posix_getpwnam')
+            ? posix_getpwnam($this->serverUser)
+            : false;
+        if (!is_array($userEntry)
+            || !isset($userEntry['uid'])
+            || (int) $userEntry['uid'] !== (int) fileowner($socketDirectory)
+        ) {
+            if (!chown($socketDirectory, $this->serverUser)) {
+                throw new RuntimeException(
+                    'Unable to set LSAPI runtime owner: ' . $socketDirectory
+                    . $this->lastErrorSuffix()
+                );
+            }
+        }
+
+        $groupEntry = function_exists('posix_getgrnam')
+            ? posix_getgrnam($this->serverGroup)
+            : false;
+        if (!is_array($groupEntry)
+            || !isset($groupEntry['gid'])
+            || (int) $groupEntry['gid'] !== (int) filegroup($socketDirectory)
+        ) {
+            if (!chgrp($socketDirectory, $this->serverGroup)) {
+                throw new RuntimeException(
+                    'Unable to set LSAPI runtime group: ' . $socketDirectory
                     . $this->lastErrorSuffix()
                 );
             }

@@ -36,12 +36,6 @@ file_put_contents(
     "listener adminListener{\n  address *:7080\n  secure 1\n}\n"
 );
 
-$manager = new Modules_SkamasleOls_OlsConfigManager(
-    $serverRoot,
-    $configRoot,
-    $stateRoot,
-    $runtimeRoot
-);
 $currentUser = get_current_user();
 $currentGroup = 'psacln';
 if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
@@ -56,6 +50,15 @@ if (function_exists('posix_getegid') && function_exists('posix_getgrgid')) {
         $currentGroup = $groupEntry['name'];
     }
 }
+
+$manager = new Modules_SkamasleOls_OlsConfigManager(
+    $serverRoot,
+    $configRoot,
+    $stateRoot,
+    $runtimeRoot,
+    $currentUser,
+    $currentGroup
+);
 
 try {
     $include = $manager->syncIncludeBlock();
@@ -523,6 +526,25 @@ try {
         is_dir($runtimeRoot . '/lsphp'),
         'LSAPI runtime directory must be created'
     );
+    assertSameValue(
+        '0750',
+        substr(sprintf('%o', fileperms($runtimeRoot . '/lsphp')), -4),
+        'LSAPI runtime directory must only be accessible by OLS'
+    );
+    if (function_exists('posix_getpwnam')) {
+        assertSameValue(
+            posix_getpwnam($currentUser)['uid'],
+            fileowner($runtimeRoot . '/lsphp'),
+            'LSAPI runtime directory must use the OLS owner'
+        );
+    }
+    if (function_exists('posix_getgrnam')) {
+        assertSameValue(
+            posix_getgrnam($currentGroup)['gid'],
+            filegroup($runtimeRoot . '/lsphp'),
+            'LSAPI runtime directory must use the OLS group'
+        );
+    }
     assertSameValue(
         true,
         is_dir($stateRoot),
